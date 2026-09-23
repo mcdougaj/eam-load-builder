@@ -1004,6 +1004,9 @@ function dfPair(){return new Promise(res=>{let done=false;const fin=v=>{if(!done
   modal(`<h2>Pair with DataFlow</h2><p>Open DataFlow on this PC and go to <b>Settings</b>. Enter the builder pairing code shown there. You only do this once.</p><input id="dfTok" maxlength="16" autocomplete="off" spellcheck="false" style="width:100%;font-size:18px;letter-spacing:3px;text-transform:uppercase;padding:8px"><div class="row"><button class="btn" data-close>Cancel</button><button class="btn pri" id="dfOk">Pair</button></div>`);
   const i=$("dfTok");i.focus();const ok=()=>{const v=i.value.trim().toUpperCase();if(!v)return;try{localStorage.setItem(DF_KEY,v)}catch(e){}closeModal();fin(v)};
   $("dfOk").onclick=ok;i.onkeydown=e=>{if(e.key==="Enter")ok()};$("modal").querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click",()=>fin(null)))})}
+function dfConfirmRefs(n,total){return new Promise(res=>{let done=false;const fin=v=>{if(!done){done=true;res(v)}};
+  modal(`<h2>Load anyway?</h2><p>${n} of ${total} selected row${total>1?"s":""} use values this builder can't find on its own sheets or lists — for example an asset group, category or department that exists in Oracle but was never entered here.</p><p>Oracle checks these values itself. DataFlow's test run fills the form from the first row and shows whether each value is accepted, and nothing is saved until you click Load there.</p><div class="row"><button class="btn" data-close>Cancel</button><button class="btn pri" id="dfAnyway">Load anyway</button></div>`);
+  $("dfAnyway").onclick=()=>{closeModal();fin(true)};$("modal").querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click",()=>fin(false)))})}
 function dfWatch(sid,id,tok,sent){const t0=Date.now(),limit=4*3600e3;
   const tick=async()=>{let s=null;try{const r=await fetch(`${DF_URL}/jobs/${id}`,{headers:{"X-DataFlow-Token":tok}});if(r.status===404)return;if(r.ok)s=await r.json()}catch(e){}
     if(s&&(s.state==="done"||s.state==="failed"||s.state==="cancelled")){dfApply(sid,s,sent);return}
@@ -1019,8 +1022,15 @@ async function dfLoadSelected(){const sh=BYID[S.active];if(!sh||sh.list){toast("
   const r0=Math.min(sel.r,sel.ar),r1=Math.max(sel.r,sel.ar),pick=[];
   for(let vr=r0;vr<=r1;vr++){const d=dr(vr);if(d==null||d>=dataRowCount())continue;const row=S.data[sh.id][d];if(isBlank(row)||isFlag(sh,row))continue;pick.push(d)}
   if(!pick.length){toast("Select the rows to load first. Rows marked Already in Oracle are skipped.");return}
-  const bad=pick.filter(d=>{const ri=V[sh.id].rows.get(d);return ri&&ri.sev==="e"});
-  if(bad.length){toast(`${bad.length} selected row${bad.length>1?"s have":" has"} errors. Fix ${bad.length>1?"them":"it"} first.`);return}
+  // Errors on linked/list fields only mean "not found on this builder's own sheets or lists" — Oracle validates
+  // those itself, and DataFlow's test run shows the result before anything is saved. Anything else (blank
+  // required value, bad date/number, too long, duplicate row) Oracle would reject too, so it still blocks.
+  const hard=[],soft=[];
+  for(const d of pick){const ri=V[sh.id].rows.get(d);if(!ri||ri.sev!=="e")continue;
+    const refOnly=!ri.msgs.some(m=>m[0]==="e")&&[...ri.cells].every(([c,ce])=>ce.sev!=="e"||!!(sh.fields[c].ref||sh.fields[c].lk));
+    (refOnly?soft:hard).push(d)}
+  if(hard.length){toast(`${hard.length} selected row${hard.length>1?"s have":" has"} errors Oracle would also reject (blank required value, bad date, too long or duplicate). Fix ${hard.length>1?"them":"it"} first.`);return}
+  if(soft.length&&!(await dfConfirmRefs(soft.length,pick.length)))return;
   let tok=null;try{tok=localStorage.getItem(DF_KEY)}catch(e){}if(!tok)tok=await dfPair();if(!tok)return;
   const cols=outCols(sh,true),val=(d,[f,i])=>String(outVal(f,S.data[sh.id][d][i]||""));
   const body={sheet:sh.name,headers:cols.map(([f])=>f.n),rows:pick.map(d=>cols.map(c=>val(d,c))),sourceRows:pick};
