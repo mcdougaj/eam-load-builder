@@ -1069,7 +1069,13 @@ function cellText(cell){if(!cell||cell.v==null)return "";
   if(cell.t==="d"){const d=cell.v;return mdY(d.getFullYear(),d.getMonth()+1,d.getDate())}
   if(cell.t==="b")return cell.v?"TRUE":"FALSE";if(cell.t==="e")return "";return String(cell.v)}
 const META=new Set(["field","oracledatatype","formatlength","oraclerequiredfieldyn","fieldvalidation","comments","javaformsnavigation"]);
-const MAPROW=/\b[a-z_]+\.[a-z_]+\b|siteid|default to|leave blank|^"[^"]*"$|to_char\(/i;
+const MAPROW=/siteid|default to|leave blank|^"[^"]*"$|to_char\(/i;
+// SQL column references in template mapping rows (cii.instance_number, msi.segment1). Case-sensitive, and the
+// column part must carry "_" or a digit, so real dotted codes such as Vehicle.PickUp Truck don't match.
+const SQLREF=/\b[a-z][a-z0-9_]*\.[a-z]*[_0-9][a-z0-9_]*\b/;
+// Fields whose real values are dotted codes (Segment1.Segment2) never mark a row as a mapping row.
+const dottedField=fl=>!!fl&&!!fl.ref&&(fl.ref.any||[fl.ref]).some(x=>x.s==="cat");
+const mapLike=(v,fl)=>typeof v==="string"&&!dottedField(fl)&&(MAPROW.test(v)||SQLREF.test(v));
 function extractTable(aoa,sh){
   // template layout: labels in column A, 'Field' row holds headers
   let hdrRow=-1,start=0;
@@ -1086,7 +1092,7 @@ function extractTable(aoa,sh){
     if(!any)continue;
     const filled=map.reduce((a,j,ci)=>a+(j>=0&&String(r[ci]??"").trim()?1:0),0);
     const noteLike=filled===1&&map.some((j,ci)=>j>=0&&String(r[ci]??"").length>40);
-    if(lead&&(noteLike||r.some(v=>typeof v==="string"&&MAPROW.test(v))||(hdrRow>=0&&String(r[0]||"").trim()&&!map.includes(0)))){skipped++;continue}
+    if(lead&&(noteLike||r.some((v,ci)=>mapLike(v,sh.fields[map[ci]]))||(hdrRow>=0&&String(r[0]||"").trim()&&!map.includes(0)))){skipped++;continue}
     lead=false;
     const row=new Array(sh.fields.length).fill("");map.forEach((j,ci)=>{if(j>=0)row[j]=r[ci]==null?"":r[ci]});out.push(row)}
   const mapped=map.filter(j=>j>=0).length;
