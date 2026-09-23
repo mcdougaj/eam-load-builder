@@ -250,7 +250,7 @@ button{cursor:pointer}
       <button class="btn sm" id="bRules">Text rules</button>
       <button class="btn sm" id="bClearSheet">Clear sheet</button>
       <span class="sep"></span>
-      <button class="btn sm pri" id="bLoadDF" title="Send the selected rows to DataFlow on this PC to load them into Oracle">▶ Load selected</button>
+      <button class="btn sm pri" id="bLoadDF" title="Send the selected rows to DataFlow's Load workspace">▶ Load selected</button>
       <button class="btn sm" id="bCheckDF" title="Ask DataFlow which rows on this sheet are already in Oracle and mark them Already in Oracle (read-only — nothing is changed in Oracle)">✓ Check Oracle</button>
       <span class="sep"></span>
       <label class="chk"><select id="fView" class="btn sm"><option value="all">All rows</option><option value="issues">Rows with issues</option><option value="errors">Rows with errors</option></select></label>
@@ -1000,44 +1000,36 @@ function changed(){validateAll();refresh();scheduleSave()}
 
 /* DataFlow link: send the selected rows to DataFlow on this PC, which test-runs, loads and checks them
    in Oracle, then report back which rows are now in Oracle so they can be marked "Already in Oracle". */
-const DF_URL="http://localhost:47811",DF_KEY="eamlb-df-token";
-function dfPair(){return new Promise(res=>{let done=false;const fin=v=>{if(!done){done=true;res(v)}};
-  modal(`<h2>Pair with DataFlow</h2><p>Open DataFlow on this PC and go to <b>Settings</b>. Enter the builder pairing code shown there. You only do this once.</p><input id="dfTok" maxlength="16" autocomplete="off" spellcheck="false" style="width:100%;font-size:18px;letter-spacing:3px;text-transform:uppercase;padding:8px"><div class="row"><button class="btn" data-close>Cancel</button><button class="btn pri" id="dfOk">Pair</button></div>`);
-  const i=$("dfTok");i.focus();const ok=()=>{const v=i.value.trim().toUpperCase();if(!v)return;try{localStorage.setItem(DF_KEY,v)}catch(e){}closeModal();fin(v)};
-  $("dfOk").onclick=ok;i.onkeydown=e=>{if(e.key==="Enter")ok()};$("modal").querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click",()=>fin(null)))})}
 function dfConfirmRefs(n,total){return new Promise(res=>{let done=false;const fin=v=>{if(!done){done=true;res(v)}};
   modal(`<h2>Load anyway?</h2><p>${n} of ${total} selected row${total>1?"s":""} use values this builder can't find on its own sheets or lists — for example an asset group, category or department that exists in Oracle but was never entered here.</p><p>Oracle checks these values itself. DataFlow's test run fills the form from the first row and shows whether each value is accepted, and nothing is saved until you click Load there.</p><div class="row"><button class="btn" data-close>Cancel</button><button class="btn pri" id="dfAnyway">Load anyway</button></div>`);
   $("dfAnyway").onclick=()=>{closeModal();fin(true)};$("modal").querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click",()=>fin(false)))})}
-function dfWatch(sid,id,tok,sent){const t0=Date.now(),limit=4*3600e3;
-  const tick=async()=>{let s=null;try{const r=await fetch(`${DF_URL}/jobs/${id}`,{headers:{"X-DataFlow-Token":tok}});if(r.status===404)return;if(r.ok)s=await r.json()}catch(e){}
-    if(s&&(s.state==="done"||s.state==="failed"||s.state==="cancelled")){dfApply(sid,s,sent);return}
-    if(Date.now()-t0<limit)setTimeout(tick,s?3000:8000)};
-  setTimeout(tick,3000)}
-function dfApply(sid,s,sent){const sh=BYID[sid];const keyCol=outCols(sh,true)[0][1],j=sh.ix[FLAG];
-  // Only mark a row if it still holds the record that was sent (rows may have been edited or deleted meanwhile).
-  const rows=(s.loadedRows||[]).filter(d=>S.data[sid][d]&&String(S.data[sid][d][keyCol]||"")===sent.get(d));
-  if(rows.length){snapshot([sid],"Mark rows loaded by DataFlow");rows.forEach(d=>S.data[sid][d][j]="Y");changed()}
-  const skipped=(s.loadedRows||[]).length-rows.length;
-  const marked=`${rows.length} row${rows.length===1?"":"s"} marked Already in Oracle.${skipped?` ${skipped} changed here meanwhile — check them.`:""}`;
-  toast(s.state==="done"?`DataFlow: ${s.message||"done"}. ${marked}`:`DataFlow ${s.state}: ${s.message||"nothing was loaded"}.${rows.length?" "+marked:""}`)}
+/* ============ DataFlow host (only inside DataFlow's Build workspace) ============ */
+// Standalone edition: DF_HOST is false, the DataFlow buttons are removed at startup and nothing below posts anything.
+const DF_HOST=!!(window.chrome&&window.chrome.webview);
+function dfPost(msg){if(DF_HOST)window.chrome.webview.postMessage(msg)}
+function dfRows(sh,pick){const cols=outCols(sh,true),val=(d,[f,i])=>String(outVal(f,S.data[sh.id][d][i]||""));
+  return {sheet:sh.name,headers:cols.map(([f])=>f.n),rows:pick.map(d=>cols.map(c=>val(d,c))),sourceRows:pick}}
+// Mark rows Already in Oracle, but only rows that still hold the key DataFlow saw (the sheet may have changed meanwhile).
+function dfMark(sheetName,sourceRows,keys){const sh=SHEETS.find(s=>s.name===sheetName);const none={marked:0,skipped:(sourceRows||[]).length};
+  if(!sh)return none;const j=sh.ix[FLAG];if(j==null)return none;const [kf,kc]=outCols(sh,true)[0];const rows=[];
+  (sourceRows||[]).forEach((d,i)=>{const row=S.data[sh.id][d];if(row&&String(outVal(kf,row[kc]||""))===String((keys||[])[i]))rows.push(d)});
+  if(rows.length){snapshot([sh.id],"Mark rows in Oracle");rows.forEach(d=>S.data[sh.id][d][j]="Y");changed()}
+  return {marked:rows.length,skipped:(sourceRows||[]).length-rows.length}}
+function dfOnMessage(m){if(!m||typeof m!=="object")return;
+  if(m.type==="mark-in-oracle"){const r=dfMark(m.sheet,m.sourceRows,m.keys);
+    toast(`${m.message?m.message+". ":""}${r.marked} row${r.marked===1?"":"s"} marked Already in Oracle.${r.skipped?` ${r.skipped} changed here meanwhile — check them.`:""}`)}
+  else if(m.type==="check-result"){if(m.error){toast("DataFlow couldn't check Oracle: "+m.error);return}
+    const r=dfMark(m.sheet,m.found,m.keys);
+    toast(`Checked ${m.checked} row${m.checked===1?"":"s"} in Oracle: ${r.marked} already there${r.marked?" — marked Already in Oracle":""}.`)}
+  else if(m.type==="workbook-data")dfWorkbook(m);
+  else if(m.type==="error")toast("DataFlow: "+m.message)}
+if(DF_HOST)window.chrome.webview.addEventListener("message",e=>dfOnMessage(e.data));
 async function dfCheckOracle(){const sh=BYID[S.active];if(!sh||sh.list){toast("Open a sheet first.");return}
-  const j=sh.ix[FLAG];if(j==null){toast(`This sheet has no "${FLAG}" column to mark.`);return}
+  if(sh.ix[FLAG]==null){toast(`This sheet has no "${FLAG}" column to mark.`);return}
   const pick=[];for(let d=0;d<S.data[sh.id].length;d++){const row=S.data[sh.id][d];if(!isBlank(row)&&!isFlag(sh,row))pick.push(d)}
   if(!pick.length){toast("Every row on this sheet is already marked Already in Oracle.");return}
-  let tok=null;try{tok=localStorage.getItem(DF_KEY)}catch(e){}if(!tok)tok=await dfPair();if(!tok)return;
-  const cols=outCols(sh,true),val=(d,[f,i])=>String(outVal(f,S.data[sh.id][d][i]||""));
-  const sent=new Map(pick.map(d=>[d,val(d,cols[0])]));
-  const body={sheet:sh.name,headers:cols.map(([f])=>f.n),rows:pick.map(d=>cols.map(c=>val(d,c))),sourceRows:pick};
-  toast(`Checking ${pick.length} row${pick.length>1?"s":""} in Oracle…`);
-  let res;try{res=await fetch(DF_URL+"/check",{method:"POST",headers:{"Content-Type":"application/json","X-DataFlow-Token":tok},body:JSON.stringify(body)})}
-  catch(e){toast("DataFlow isn't reachable. Start DataFlow on this PC, then click Check Oracle again.");return}
-  if(res.status===401){try{localStorage.removeItem(DF_KEY)}catch(e){}toast("DataFlow didn't accept the pairing code. Click Check Oracle again to re-enter it.");return}
-  let r={};try{r=await res.json()}catch(e){}
-  if(!res.ok){toast("DataFlow couldn't check Oracle: "+(r.error||res.status));return}
-  // Mark only rows that still hold the key that was checked (the sheet may have been edited while waiting).
-  const rows=(r.found||[]).filter(d=>S.data[sh.id][d]&&String(S.data[sh.id][d][cols[0][1]]||"")===sent.get(d));
-  if(rows.length){snapshot([sh.id],"Mark rows found in Oracle");rows.forEach(d=>S.data[sh.id][d][j]="Y");changed()}
-  toast(`Checked ${pick.length} row${pick.length>1?"s":""} in Oracle: ${rows.length} already there${rows.length?" — marked Already in Oracle":""}.`)}
+  dfPost(Object.assign({type:"check-oracle"},dfRows(sh,pick)));
+  toast(`Checking ${pick.length} row${pick.length>1?"s":""} in Oracle…`)}
 async function dfLoadSelected(){const sh=BYID[S.active];if(!sh||sh.list){toast("Open a sheet first.");return}
   const r0=Math.min(sel.r,sel.ar),r1=Math.max(sel.r,sel.ar),pick=[];
   for(let vr=r0;vr<=r1;vr++){const d=dr(vr);if(d==null||d>=dataRowCount())continue;const row=S.data[sh.id][d];if(isBlank(row)||isFlag(sh,row))continue;pick.push(d)}
@@ -1051,21 +1043,13 @@ async function dfLoadSelected(){const sh=BYID[S.active];if(!sh||sh.list){toast("
     (refOnly?soft:hard).push(d)}
   if(hard.length){toast(`${hard.length} selected row${hard.length>1?"s have":" has"} errors Oracle would also reject (blank required value, bad date, too long or duplicate). Fix ${hard.length>1?"them":"it"} first.`);return}
   if(soft.length&&!(await dfConfirmRefs(soft.length,pick.length)))return;
-  let tok=null;try{tok=localStorage.getItem(DF_KEY)}catch(e){}if(!tok)tok=await dfPair();if(!tok)return;
-  const cols=outCols(sh,true),val=(d,[f,i])=>String(outVal(f,S.data[sh.id][d][i]||""));
-  const body={sheet:sh.name,headers:cols.map(([f])=>f.n),rows:pick.map(d=>cols.map(c=>val(d,c))),sourceRows:pick};
-  let res;try{res=await fetch(DF_URL+"/load",{method:"POST",headers:{"Content-Type":"application/json","X-DataFlow-Token":tok},body:JSON.stringify(body)})}
-  catch(e){toast("DataFlow isn't reachable. Start DataFlow on this PC, then click Load selected again.");return}
-  if(res.status===401){try{localStorage.removeItem(DF_KEY)}catch(e){}toast("DataFlow didn't accept the pairing code. Click Load selected again to re-enter it.");return}
-  if(!res.ok){let m=res.status;try{m=(await res.json()).error||m}catch(e){}toast("DataFlow refused the rows: "+m);return}
-  const {jobId}=await res.json();const sent=new Map(pick.map(d=>[d,val(d,cols[0])]));
-  toast(`Sent ${pick.length} row${pick.length>1?"s":""} to DataFlow. Run the test and load there — this sheet updates when it's done.`);
-  dfWatch(sh.id,jobId,tok,sent)}
+  dfPost(Object.assign({type:"load-rows"},dfRows(sh,pick)));
+  toast(`Sent ${pick.length} row${pick.length>1?"s":""} to the Load workspace. Run the test there; this sheet updates when rows are in Oracle.`)}
 
 /* toolbar */
 $("bUndo").onclick=undo;
-$("bLoadDF").onclick=dfLoadSelected;
-$("bCheckDF").onclick=dfCheckOracle;
+if(DF_HOST){$("bLoadDF").onclick=dfLoadSelected;$("bCheckDF").onclick=dfCheckOracle}
+else ["bLoadDF","bCheckDF"].forEach(id=>$(id).remove());   // standalone edition: validation only
 $("fView").onchange=e=>{S.view=e.target.value;focusRows=null;hideResult();sel={r:0,c:0,ar:0,ac:0};grid.scrollTop=0;refresh()};
 $("autoclean").onchange=e=>{S.cleanOnEntry=e.target.checked;scheduleSave()};
 $("bDel").onclick=()=>{const r0=Math.min(sel.r,sel.ar),r1=Math.max(sel.r,sel.ar);const del=new Set();for(let vr=r0;vr<=r1;vr++){const d=dr(vr);if(d!=null&&d<dataRowCount())del.add(d)}
@@ -1273,13 +1257,29 @@ let tt=0;function toast(msg,act,actLabel){const t=$("toast");t.innerHTML=esc(msg
 let db=null,st=0;
 function idb(){return new Promise(res=>{try{const r=indexedDB.open("eam-load-builder",1);r.onupgradeneeded=()=>r.result.createObjectStore("s");r.onsuccess=()=>res(r.result);r.onerror=()=>res(null)}catch(e){res(null)}})}
 function scheduleSave(){clearTimeout(st);st=setTimeout(save,900)}
-async function save(){try{if(!db)db=await idb();if(!db){$("saved").textContent="Autosave unavailable here. Export to keep your work.";return}
-  const tx=db.transaction("s","readwrite");tx.objectStore("s").put({data:S.data,active:S.active,clean:S.cleanOnEntry,textRules:S.textRules,v:2},"draft");
+function stateObj(){return {data:S.data,active:S.active,clean:S.cleanOnEntry,textRules:S.textRules,v:2}}
+function applyState(v){if(!v||!v.data)return false;
+  for(const s of ALL){const rows=v.data[s.id];if(Array.isArray(rows))S.data[s.id]=rows.map(row=>{const a=new Array(s.fields.length).fill("");row.forEach((x,i)=>{if(i<a.length)a[i]=x==null?"":String(x)});return a})}
+  if(v.lists)migrateLists(v.lists);if(v.active&&(BYID[v.active]||v.active==="_lists"||v.active==="_summary"))S.active=v.active;
+  if(typeof v.clean==="boolean")S.cleanOnEntry=v.clean;if(v.textRules)S.textRules=Object.assign(S.textRules,v.textRules);return true}
+// DataFlow edition: workbooks are files DataFlow owns. WB_NAME is the open workbook; dfWbWait resolves the startup request.
+let WB_NAME="",dfWbWait=null;
+function dfWorkbook(m){WB_NAME=m.name||"";if(dfWbWait){const f=dfWbWait;dfWbWait=null;f(m.state||null);return}
+  // DataFlow switched workbooks while the page is open: start from empty, then apply the file.
+  for(const s of ALL)S.data[s.id]=[];S.textRules={codeCase:"as_typed",flagRepeat:true,flagAllCaps:false};
+  applyState(m.state);$("autoclean").checked=S.cleanOnEntry;validateAll();openSheet(BYID[S.active]||S.active==="_lists"||S.active==="_summary"?S.active:SHEETS[0].id);
+  $("saved").textContent=(m.state?"Opened workbook ":"New workbook ")+WB_NAME}
+async function save(){
+  if(DF_HOST){dfPost({type:"workbook-save",name:WB_NAME,state:stateObj()});const d=new Date();$("saved").textContent=`Saved to ${WB_NAME||"workbook"} ${pad(d.getHours())}:${pad(d.getMinutes())}`;return}
+  try{if(!db)db=await idb();if(!db){$("saved").textContent="Autosave unavailable here. Export to keep your work.";return}
+  const tx=db.transaction("s","readwrite");tx.objectStore("s").put(stateObj(),"draft");
   tx.oncomplete=()=>{const d=new Date();$("saved").textContent="Saved in this browser "+pad(d.getHours())+":"+pad(d.getMinutes())};
   tx.onerror=()=>{$("saved").textContent="Autosave failed. Export to keep your work."}}catch(e){$("saved").textContent="Autosave unavailable here. Export to keep your work."}}
-async function load(){try{db=await idb();if(!db)return;await new Promise(res=>{const tx=db.transaction("s","readonly");const r=tx.objectStore("s").get("draft");
-  r.onsuccess=()=>{const v=r.result;if(v&&v.data){for(const s of ALL){const rows=v.data[s.id];if(Array.isArray(rows))S.data[s.id]=rows.map(row=>{const a=new Array(s.fields.length).fill("");row.forEach((x,i)=>{if(i<a.length)a[i]=x==null?"":String(x)});return a})}
-    if(v.lists)migrateLists(v.lists);if(v.active&&(BYID[v.active]||v.active==="_lists"||v.active==="_summary"))S.active=v.active;if(typeof v.clean==="boolean")S.cleanOnEntry=v.clean;if(v.textRules)S.textRules=Object.assign(S.textRules,v.textRules);$("saved").textContent="Draft restored from this browser"}res()};r.onerror=()=>res()})}catch(e){}}
+async function load(){
+  if(DF_HOST){const v=await new Promise(res=>{dfWbWait=res;dfPost({type:"workbook-open"});setTimeout(()=>{if(dfWbWait===res){dfWbWait=null;res(null)}},5000)});
+    $("saved").textContent=(applyState(v)?"Opened workbook ":"New workbook ")+WB_NAME;return}
+  try{db=await idb();if(!db)return;await new Promise(res=>{const tx=db.transaction("s","readonly");const r=tx.objectStore("s").get("draft");
+    r.onsuccess=()=>{if(applyState(r.result))$("saved").textContent="Draft restored from this browser";res()};r.onerror=()=>res()})}catch(e){}}
 
 function migrateLists(old){
   for(const L of LISTS){const a=old[L.list];if(!Array.isArray(a)||S.data[L.id].length)continue;
