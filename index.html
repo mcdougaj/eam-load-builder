@@ -1,0 +1,1437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>eAM load builder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600&family=Barlow:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#E6EBEF;--panel:#FFFFFF;--panel2:#F3F6F8;--ink:#14212B;--ink2:#465763;--ink3:#77868F;
+  --line:#C6D0D8;--line2:#E0E6EB;--acc:#1D5C8A;--acc-bg:#E2EDF6;--acc-ink:#FFFFFF;
+  --err:#B0261D;--err-bg:#FBE6E3;--warn:#8F5600;--warn-bg:#FFF1D6;--ok:#2B7446;--ok-bg:#E1F1E6;
+  --selbg:rgba(29,92,138,.10);
+  --ui:"Barlow Semi Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0E151B;--panel:#141E26;--panel2:#1A2630;--ink:#E1E8ED;--ink2:#A6B4BE;--ink3:#76858F;
+  --line:#2C3A46;--line2:#21303B;--acc:#6EA7D4;--acc-bg:#17324A;--acc-ink:#0E151B;
+  --err:#FF8B80;--err-bg:#3A1714;--warn:#F0B25A;--warn-bg:#382810;--ok:#79C394;--ok-bg:#132D1D;--selbg:rgba(110,167,212,.14);}}
+:root[data-theme="dark"]{
+  --bg:#0E151B;--panel:#141E26;--panel2:#1A2630;--ink:#E1E8ED;--ink2:#A6B4BE;--ink3:#76858F;
+  --line:#2C3A46;--line2:#21303B;--acc:#6EA7D4;--acc-bg:#17324A;--acc-ink:#0E151B;
+  --err:#FF8B80;--err-bg:#3A1714;--warn:#F0B25A;--warn-bg:#382810;--ok:#79C394;--ok-bg:#132D1D;--selbg:rgba(110,167,212,.14);}
+*,*::before,*::after{box-sizing:inherit}
+html,body{height:100%;margin:0}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--body);display:grid;grid-template-rows:auto 1fr;height:100%;overflow:hidden}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+
+.top{display:flex;align-items:center;gap:16px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+.brand{font-family:var(--ui);font-weight:600;font-size:18px;letter-spacing:.2px;white-space:nowrap}
+.brand small{display:block;font-weight:400;font-size:12px;color:var(--ink3);letter-spacing:0}
+.top .spacer{flex:1}
+.saved{font-size:12px;color:var(--ink3);white-space:nowrap}
+.btn{border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:6px 12px;font-family:var(--ui);font-weight:500;font-size:14px;white-space:nowrap}
+.btn:hover{border-color:var(--ink3)}
+.btn.pri{background:var(--acc);border-color:var(--acc);color:var(--acc-ink)}
+.btn.sm{padding:3px 9px;font-size:13px}
+.btn:disabled{opacity:.45;cursor:default}
+.chk{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--ink2);white-space:nowrap}
+
+.wrap{display:grid;grid-template-columns:250px minmax(0,1fr) 330px;min-height:0;position:relative}
+/* sequence rail */
+.rail{background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding:14px 0 24px}
+.rail h3{font-family:var(--ui);font-weight:500;font-size:12px;color:var(--ink3);margin:14px 18px 4px;letter-spacing:.3px}
+.rail h3:first-child{margin-top:0}
+.stn{position:relative;display:grid;grid-template-columns:22px 1fr auto;align-items:center;gap:8px;width:100%;border:0;background:none;text-align:left;padding:5px 12px 5px 16px;font-family:var(--ui);font-size:14.5px}
+.stn::before{content:"";position:absolute;left:26px;top:0;bottom:0;width:2px;background:var(--line2)}
+.stn .dot{position:relative;z-index:1;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:600;background:var(--panel2);border:1.5px solid var(--line);color:var(--ink3)}
+.stn.has .dot{border-color:var(--ok);color:var(--ok);background:var(--ok-bg)}
+.stn.w .dot{border-color:var(--warn);color:var(--warn);background:var(--warn-bg)}
+.stn.e .dot{border-color:var(--err);color:var(--err);background:var(--err-bg)}
+.stn .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stn .ct{font-size:12px;color:var(--ink3);font-variant-numeric:tabular-nums}
+.stn .ct b{font-weight:600;color:var(--err)}
+.stn .ct i{font-style:normal;color:var(--warn)}
+.stn:hover{background:var(--panel2)}
+.stn.on{background:var(--acc-bg)}
+.stn.on .nm{font-weight:600}
+
+/* main */
+.main{display:grid;grid-template-rows:auto auto auto auto 1fr auto;grid-template-columns:minmax(0,1fr);min-height:0;min-width:0;overflow:hidden}
+.shead{padding:14px 18px 8px;display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.shead h1{font-family:var(--ui);font-weight:600;font-size:24px;margin:0;line-height:1.1}
+.shead .nav{font-size:12.5px;color:var(--ink3);margin-top:2px}
+.shead .sp{flex:1}
+.tools{display:flex;gap:8px;flex-wrap:wrap;padding:0 18px 10px;align-items:center}
+.tools .sep{width:1px;height:22px;background:var(--line);margin:0 4px}
+.result{margin:0 18px 10px;border:1px solid var(--line);border-left:4px solid var(--acc);border-radius:0;background:var(--panel);padding:8px 12px;display:none;gap:12px;align-items:center;flex-wrap:wrap;font-size:13.5px}
+.result.show{display:flex}
+.result.bad{border-left-color:var(--err)}
+.result.mid{border-left-color:var(--warn)}
+.result.good{border-left-color:var(--ok)}
+.result .x{margin-left:auto;border:0;background:none;font-size:18px;line-height:1;color:var(--ink3)}
+
+.gridwrap{position:relative;min-width:0;margin:0 18px;border:1px solid var(--line);background:var(--panel);min-height:0;display:flex}
+#grid{position:relative;overflow:auto;flex:1;min-width:0;outline:none;font-family:var(--ui);font-size:13.5px;font-variant-numeric:tabular-nums}
+#head{position:sticky;top:0;z-index:4;display:flex;background:var(--panel2);border-bottom:1px solid var(--line)}
+.hc{flex:none;height:48px;padding:5px 8px;border-right:1px solid var(--line2);overflow:hidden}
+.hc .hn{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hc .hm{font-size:11.5px;color:var(--ink3);white-space:nowrap}
+.hc .req{color:var(--err);font-weight:600}
+.hc.rn,.c.rn{position:sticky;left:0;z-index:2;background:var(--panel2);text-align:right;color:var(--ink3);border-right:1px solid var(--line)}
+.hc.rn{z-index:5}
+#rows{position:relative}
+.r{position:absolute;left:0;display:flex;height:28px}
+.c{flex:none;height:28px;line-height:27px;padding:0 8px;border-right:1px solid var(--line2);border-bottom:1px solid var(--line2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:var(--panel)}
+.c.rn{font-size:12px;padding:0 8px 0 4px;display:flex;align-items:center;justify-content:flex-end;gap:6px}
+.c.rn .sd{width:7px;height:7px;border-radius:50%;flex:none}
+.r.re .c.rn .sd{background:var(--err)}
+.r.rw .c.rn .sd{background:var(--warn)}
+.r.spare .c:not(.rn){background:var(--panel2)}
+.c.ce{background:var(--err-bg);box-shadow:inset 0 -2px 0 var(--err)}
+.c.cw{background:var(--warn-bg);box-shadow:inset 0 -2px 0 var(--warn)}
+.c.sel{background-image:linear-gradient(var(--selbg),var(--selbg))}
+.c.act{outline:2px solid var(--acc);outline-offset:-2px}
+.c.num{text-align:right}
+#editor{position:absolute;z-index:6;height:28px;border:2px solid var(--acc);padding:0 6px;font-family:var(--ui);font-size:13.5px;background:var(--panel);display:none;outline:none}
+#kb{position:absolute;left:-9999px;top:0;width:1px;height:1px;opacity:0}
+.empty{position:absolute;left:50%;top:120px;transform:translateX(-50%);text-align:center;color:var(--ink2);pointer-events:none;max-width:420px;font-size:14px}
+.empty strong{display:block;font-family:var(--ui);font-size:17px;color:var(--ink);margin-bottom:4px}
+
+.status{margin:8px 18px 14px;min-height:40px;font-size:13px;color:var(--ink2);display:flex;gap:14px;align-items:flex-start}
+.status .loc{font-family:var(--ui);font-weight:600;color:var(--ink);white-space:nowrap}
+.status ul{margin:0;padding:0;list-style:none}
+.status li.e{color:var(--err)}.status li.w{color:var(--warn)}
+
+/* issues */
+.issues{background:var(--panel);border-left:1px solid var(--line);overflow:auto;padding:14px 16px 24px}
+.issues h2{font-family:var(--ui);font-weight:600;font-size:17px;margin:0 0 2px}
+.tally{display:flex;gap:14px;font-size:13px;color:var(--ink2);margin-bottom:12px}
+.tally b{font-family:var(--ui);font-size:20px;font-weight:600;display:block;line-height:1.1}
+.tally .te b{color:var(--err)}.tally .tw b{color:var(--warn)}
+.grp{border-top:1px solid var(--line2);padding:10px 0}
+.grp .gt{display:flex;gap:8px;align-items:baseline}
+.grp .sv{flex:none;width:8px;height:8px;border-radius:50%;margin-top:6px;align-self:flex-start}
+.grp.e .sv{background:var(--err)}.grp.w .sv{background:var(--warn)}
+.grp .gl{flex:1;font-size:13.5px}
+.grp .gn{font-family:var(--ui);font-weight:600;font-variant-numeric:tabular-nums}
+.grp .ga{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 0 16px}
+.allsheets{margin-top:18px;border-top:1px solid var(--line);padding-top:12px}
+.allsheets h3{font-family:var(--ui);font-weight:600;font-size:15px;margin:0 0 6px}
+.allsheets table{width:100%;border-collapse:collapse;font-size:13px}
+.allsheets td{padding:3px 0;border-bottom:1px solid var(--line2)}
+.allsheets td.n{text-align:right;font-variant-numeric:tabular-nums;width:56px}
+.allsheets td.n.e{color:var(--err)}.allsheets td.n.w{color:var(--warn)}
+.allsheets tr{cursor:pointer}
+.clean-ok{color:var(--ok);font-size:13.5px;padding:8px 0}
+
+/* reference lists */
+.lists{overflow:auto;padding:4px 18px 24px;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+.lst{background:var(--panel);border:1px solid var(--line);padding:10px 12px}
+.lst label{font-family:var(--ui);font-weight:600;display:flex;justify-content:space-between;gap:8px}
+.lst label span{font-weight:400;color:var(--ink3);font-size:12.5px}
+.lst p{margin:2px 0 6px;font-size:12px;color:var(--ink3)}
+.lst textarea{width:100%;height:120px;resize:vertical;border:1px solid var(--line2);background:var(--panel2);padding:6px;font:13px/1.4 var(--ui)}
+
+/* modal */
+.scrim{position:fixed;inset:0;background:rgba(10,18,24,.45);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
+.scrim.show{display:flex}
+.modal{background:var(--panel);border:1px solid var(--line);width:min(620px,100%);max-height:85vh;overflow:auto;padding:18px 20px}
+.modal h2{font-family:var(--ui);font-weight:600;font-size:20px;margin:0 0 6px}
+.modal p{margin:6px 0;color:var(--ink2);font-size:13.5px}
+.modal table{width:100%;border-collapse:collapse;font-size:13px;margin:10px 0}
+.modal th,.modal td{text-align:left;padding:4px 6px;border-bottom:1px solid var(--line2);vertical-align:top}
+.modal th{font-family:var(--ui);font-weight:600;color:var(--ink2)}
+.modal td.n{text-align:right;font-variant-numeric:tabular-nums}
+.modal .row{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap}
+.opt{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line2);font-size:13.5px}
+.opt:last-of-type{border-bottom:0}
+.opt small{display:block;color:var(--ink3)}
+.toast{position:fixed;right:18px;bottom:calc(18px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--panel);padding:9px 14px;font-size:13.5px;z-index:60;display:none;max-width:420px}
+.toast.show{display:block}
+.toast .btn{color:var(--ink);background:var(--panel)}
+.summary{overflow:auto;padding:4px 18px 28px;display:none}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:4px 0 18px}
+.kpi{background:var(--panel);border:1px solid var(--line);padding:10px 14px;display:flex;flex-direction:column;justify-content:center;min-height:74px}
+.kpi b{display:block;font-family:var(--ui);font-size:26px;font-weight:600;line-height:1.1;font-variant-numeric:tabular-nums}
+.kpi span{font-size:12.5px;color:var(--ink2)}
+.kpi.e b{color:var(--err)}.kpi.w b{color:var(--warn)}.kpi.ok b{color:var(--ok)}
+.sumsec{margin:18px 0 6px;font-family:var(--ui);font-weight:600;font-size:17px}
+.sumsec small{display:block;font-family:var(--body);font-weight:400;font-size:12.5px;color:var(--ink3)}
+.stab{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);font-size:13px;table-layout:fixed}
+.stab th,.stab td{padding:7px 12px;border-bottom:1px solid var(--line2);text-align:left;vertical-align:middle;overflow:hidden;text-overflow:ellipsis}
+.stab th{font-family:var(--ui);font-weight:600;color:var(--ink2);background:var(--panel2);white-space:nowrap}
+.stab th.n,.stab td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.stab td.nm{white-space:nowrap}
+.stab td.tw{white-space:normal;line-height:1.35;overflow-wrap:anywhere}
+.stab tr.go{cursor:pointer}.stab tr.go:hover td{background:var(--panel2)}
+.bar{height:8px;background:var(--line2);width:100%;display:flex;overflow:hidden}
+.bar i{display:block;height:100%}.bar .bo{background:var(--ok)}.bar .bw{background:var(--warn)}.bar .be{background:var(--err)}
+.muted{color:var(--ink3)}
+.mobsel{display:none}
+.chat{background:var(--panel);border-left:1px solid var(--line);display:none;grid-template-rows:auto 1fr auto;min-height:0}
+.wrap.chatting .issues{display:none}.wrap.chatting .chat{display:grid}
+.chat header{padding:12px 14px 8px;border-bottom:1px solid var(--line2)}
+.chat header h2{font-family:var(--ui);font-weight:600;font-size:17px;margin:0;display:flex;justify-content:space-between;align-items:center}
+.chat header p{margin:4px 0 0;font-size:12px;color:var(--ink3)}
+.msgs{overflow:auto;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.msg{font-size:13.5px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word;max-width:100%}
+.msg.u{align-self:flex-end;background:var(--acc-bg);padding:7px 10px;border-radius:10px 10px 2px 10px;max-width:88%}
+.msg.a{padding:2px 0}
+.msg.sys{font-size:12.5px;color:var(--ink3)}
+.msg.err{color:var(--err);font-size:12.5px}
+.tool{font-size:12px;color:var(--ink3);font-family:var(--ui)}
+.prop{border:1px solid var(--line);border-left:3px solid var(--acc);padding:8px 10px;font-size:12.5px;background:var(--panel2)}
+.prop.done{border-left-color:var(--ok)}.prop.gone{border-left-color:var(--ink3);opacity:.75}
+.prop h4{margin:0 0 4px;font-family:var(--ui);font-size:14px;font-weight:600}
+.prop ul{margin:4px 0 6px;padding-left:16px}
+.prop .acts{display:flex;gap:6px;margin-top:6px}
+.chatin{border-top:1px solid var(--line2);padding:10px 12px;display:flex;gap:8px;align-items:flex-end}
+.chatin textarea{flex:1;resize:none;height:58px;border:1px solid var(--line);background:var(--panel2);padding:6px 8px;font:13.5px/1.4 var(--body)}
+.sugg{display:flex;flex-wrap:wrap;gap:6px}
+.fld{display:grid;grid-template-columns:150px 1fr;gap:6px 12px;align-items:center;margin:10px 0}
+.fld label{font-family:var(--ui);font-weight:500;font-size:14px}
+.fld input,.fld select{border:1px solid var(--line);background:var(--panel2);padding:6px 8px;border-radius:6px;width:100%}
+.fld .hint{grid-column:2;font-size:12px;color:var(--ink3);margin-top:-4px}
+.stat{font-size:13px;margin-top:8px;min-height:20px}.stat.ok{color:var(--ok)}.stat.bad{color:var(--err)}
+@media (max-width:1100px){.wrap.chatting .chat{display:grid;position:absolute;right:0;top:0;bottom:0;width:360px;z-index:21;box-shadow:-2px 0 0 var(--line)}}
+.r.fx .c:not(.rn){color:var(--ink3);font-style:italic}
+.lsec{grid-column:1/-1;font-family:var(--ui);font-weight:600;font-size:17px;margin:8px 0 -4px}
+.lsec small{display:block;font-family:var(--body);font-weight:400;font-size:13px;color:var(--ink2)}
+.lh{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.lh strong{font-family:var(--ui);font-size:16px}
+.lh span{font-size:12.5px;color:var(--ink3);white-space:nowrap}
+.used{display:flex;flex-wrap:wrap;gap:4px;margin:8px 0}
+.chip{border:1px solid var(--line);background:var(--panel2);border-radius:10px;padding:1px 8px;font-size:12px;font-family:var(--ui)}
+.chip:hover{border-color:var(--acc);color:var(--acc)}
+.lst .st{font-size:13px;margin:6px 0 8px}
+.lst .st.bad{color:var(--err)}.lst .st.ok{color:var(--ok)}.lst .st.off{color:var(--ink3)}
+.lst .acts{display:flex;gap:6px;flex-wrap:wrap}
+.rv{max-height:48vh;overflow:auto;border:1px solid var(--line2);margin:8px 0}
+.rv table{margin:0}
+@media (max-width:1100px){.wrap{grid-template-columns:220px minmax(0,1fr)}.issues{display:none}.wrap.showiss .issues{display:block;position:absolute;right:0;top:0;bottom:0;width:320px;z-index:20;box-shadow:-2px 0 0 var(--line)}}
+@media (max-width:760px){.wrap{grid-template-columns:minmax(0,1fr)}.rail{display:none}.mobsel{display:block;margin:0 18px 8px}.top{flex-wrap:wrap}.brand small{display:none}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">eAM load builder<small>Oracle eAM conversion templates, checked as you build</small></div>
+  <div class="spacer"></div>
+  <span class="saved" id="saved">Not saved yet</span>
+  <label class="chk" title="Trim spaces, standardize dates, numbers, Y/N and list values as rows are typed, pasted or imported"><input type="checkbox" id="autoclean" checked> Clean on entry</label>
+  <button class="btn" id="bAsk" title="Ask an AI about the data and get proposed fixes">Ask</button>
+  <button class="btn" id="bAI" title="AI provider and key">AI settings</button>
+  <button class="btn" id="bImport">Import</button>
+  <button class="btn pri" id="bExport">Export</button>
+  <button class="btn" id="bIss" title="Show issues panel" style="display:none">Issues</button>
+</header>
+<div class="wrap" id="wrap">
+  <nav class="rail" id="rail" aria-label="Sheets in load order"></nav>
+  <section class="main" id="main">
+    <div class="shead">
+      <div><h1 id="sTitle">Area</h1><div class="nav" id="sNav"></div></div>
+      <div class="sp"></div>
+    </div>
+    <select class="mobsel" id="mobsel" aria-label="Sheet"></select>
+    <div class="tools" id="tools">
+      <button class="btn sm" id="bUndo" disabled>Undo</button>
+      <span class="sep"></span>
+      <button class="btn sm" id="bDel">Delete selected rows</button>
+      <button class="btn sm" id="bClean">Clean this sheet</button>
+      <button class="btn sm" id="bRules">Text rules</button>
+      <button class="btn sm" id="bClearSheet">Clear sheet</button>
+      <span class="sep"></span>
+      <label class="chk"><select id="fView" class="btn sm"><option value="all">All rows</option><option value="issues">Rows with issues</option><option value="errors">Rows with errors</option></select></label>
+      <span class="muted" id="rowcount" style="font-size:13px"></span>
+    </div>
+    <div class="result" id="result"></div>
+    <div class="gridwrap" id="gridwrap">
+      <div id="grid" tabindex="0" aria-label="Sheet grid">
+        <div id="head"></div>
+        <div id="rows"></div>
+        <input id="editor" list="dl" autocomplete="off" spellcheck="false">
+        <datalist id="dl"></datalist>
+      </div>
+      <textarea id="kb" aria-hidden="true" tabindex="-1"></textarea>
+      <div class="empty" id="empty"><strong>No rows yet</strong>Type straight into the grid, paste rows from Excel with Ctrl+V, or use Import. Every cell is checked the moment it lands.</div>
+    </div>
+    <div class="lists" id="lists" style="display:none"></div>
+    <div class="summary" id="summary"></div>
+    <div class="status" id="status"></div>
+  </section>
+  <aside class="issues" id="issues" aria-label="Issues"></aside>
+  <aside class="chat" id="chat" aria-label="Ask Claude">
+    <header><h2>Ask about the data <span><button class="btn sm" id="chatCfg">Settings</button> <button class="btn sm" id="chatClose">Close</button></span></h2><p id="chatWho"></p><p>Your question and any rows the AI reads are sent to the provider shown above. Check your data policy before using production data. The AI only proposes changes; nothing changes until you select Apply.</p></header>
+    <div class="msgs" id="msgs"></div>
+    <div class="chatin"><textarea id="chatBox" placeholder="Ask about the open sheet, or ask for a fix…" aria-label="Message"></textarea><div style="display:flex;flex-direction:column;gap:6px"><button class="btn pri sm" id="chatSend">Send</button><button class="btn sm" id="chatStop" disabled>Stop</button></div></div>
+  </aside>
+</div>
+<div class="scrim" id="scrim"><div class="modal" id="modal" role="dialog" aria-modal="true"></div></div>
+<div class="toast" id="toast"></div>
+<input type="file" id="file" accept=".xlsx,.xlsm,.xls,.csv,.txt,.tsv" style="display:none">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+"use strict";
+/* ============ schema (from the Oracle eAM conversion template) ============ */
+const SEP="\u0001";
+const f=(n,t,l,r,o)=>Object.assign({n,t,l:l||0,r:!!r},o||{});
+const O=()=>f("Organization","t",3,1,{lk:"orgs"});
+const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
+const ATTR_COLS=[...Array(20)].map((_,i)=>"C_ATTRIBUTE"+(i+1)).concat([...Array(10)].map((_,i)=>"N_ATTRIBUTE"+(i+1)),[...Array(10)].map((_,i)=>"D_ATTRIBUTE"+(i+1)));
+const rAG={s:"ag",m:[["Organization","Organization"],["Asset Group","Asset Group"]]};
+const rCat=src=>({s:"cat",m:[["Category Code",src]]});
+const rAssetOnly=src=>({s:"an",m:[["Organization","Organization"],["Asset Number",src]]});
+const rAsset=src=>({any:[{s:"an",m:[["Organization","Organization"],["Asset Number",src]]},{s:"rt",m:[["Organization","Organization"],["Asset Route Number",src]]}],label:"Asset Numbers or Asset Route"});
+const rAct=src=>({s:"act",m:[["Organization","Organization"],["Activity Name",src]]});
+const rOp=(a,o)=>({s:"aop",m:[["Organization","Organization"],["Activity Name",a],["Operation Sequence Number",o]]});
+const rSched={s:"pms",m:[["Organization","Organization"],["Schedule Name","Schedule Name"]]};
+const rArea={s:"area",m:[["Organization","Organization"],["Area","Area"]]};
+const rMeter=src=>({s:"met",m:[["Name",src]]});
+const rAttG={s:"attg",m:[["Attribute Group","Attribute Group"]]};
+const rFS={s:"fs",m:[["Set Name","Set Name"]]};
+
+const SHEETS=[
+{id:"area",g:"Foundation",name:"Area",nav:"eAM Administrator > Setup > Area",
+ fields:[O(),f("Area","t",30,1),f("Description","t",240,1),f("Start Date","d"),f("End Date","d",0,0,{after:"Start Date"})],keys:[["Organization","Area"]]},
+{id:"cat",g:"Foundation",name:"Category",nav:"Setup > Category > Category Codes (Asset Management). Segment1.Segment2 must be unique.",
+ fields:[f("Segment1","t",40,1),f("Segment2","t",40,1),f("Description","t",90)],keys:[["Segment1","Segment2"]],
+ derive:{"Category Code":g=>g("Segment1")&&g("Segment2")?g("Segment1")+"."+g("Segment2"):""},
+ split:{"Category Code":v=>{const i=v.indexOf(".");return i<0?{Segment1:v}:{Segment1:v.slice(0,i),Segment2:v.slice(i+1)}}}},
+{id:"ag",g:"Foundation",name:"Asset Group",nav:"eAM Administrator > Assets > Asset Groups. Template must be a defined item template.",
+ fields:[O(),f("Asset Group","t",40,1),f("Description","t",240,1),f("Template Name","t",30,1,{lk:"templates"}),f("Serial Generation","t",10),f("Starting Prefix","t",30),f("Starting Number","t",30)],keys:[["Organization","Asset Group"]],
+ rule(g,P,X){const o=g("Organization"),a=g("Asset Group");if(o&&a&&!X.set("ca",["Organization","Asset Group"]).has(k(o,a)))P("Asset Group","w","No category assigned to this asset group yet","Asset group has no category assignment")}},
+{id:"ca",g:"Foundation",name:"Category Assignment",nav:"Setup > Category > Category Sets (Enterprise Asset Management) > Assign",
+ fields:[O(),f("Asset Group","t",40,1,{ref:rAG}),f("Category","t",90,1,{ref:rCat("Category")})],
+ keys:[["Organization","Asset Group","Category"],{f:["Organization","Asset Group"],sev:"w",msg:"Asset group has more than one category in the EAM set. Valid only if the set allows multiple assignments."}]},
+{id:"an",g:"Foundation",name:"Asset Numbers",nav:"eAM Administrator > Assets > Asset Numbers",
+ fields:[f("Asset Number","t",30,1),f("Description","t",240),f("Asset Group","t",40,1,{ref:rAG}),f("Serial Number","t",30,1),f("Asset Category","t",90,0,{ref:rCat("Asset Category")}),O(),f("Owning Department","t",10,0,{lk:"depts"}),f("Area","t",30,0,{ref:rArea}),f("Asset Criticality Code","t",80,0,{lk:"crit"}),f("WIP Accounting Class Code","t",10,0,{lk:"wip"}),f("Maintainable Flag","yn"),f("Operational Flag","yn"),f("Warranty Expiry Date","d"),f("Parent Asset Number","t",30,0,{ref:rAssetOnly("Parent Asset Number")}),f("Fixed Asset","t",30),f("Latitude","n",0,0,{min:-90,max:90}),f("Longitude","n",0,0,{min:-180,max:180})],
+ keys:[["Organization","Asset Number"],{f:["Organization","Asset Group","Serial Number"],msg:"Serial number repeats within this asset group"}],
+ rule(g,P,X){const o=g("Organization"),a=g("Asset Group"),c=g("Asset Category");
+  if(a&&c&&X.set("ca",["Organization","Asset Group"]).has(k(o,a))&&!X.set("ca",["Organization","Asset Group","Category"]).has(k(o,a,c)))P("Asset Category","w",`Category "${c}" isn't assigned to asset group "${a}" on Category Assignment`,"Asset category not assigned to its asset group",{s:"ca",v:{Organization:o,"Asset Group":a,Category:c}});
+  if(g("Parent Asset Number")&&g("Parent Asset Number")===g("Asset Number"))P("Parent Asset Number","e","An asset can't be its own parent","Asset is its own parent");
+  const an=g("Asset Number"),sn=g("Serial Number");
+  const rr=an&&X.rowsBy("rt",["Asset Route Number"]).get(an);if(rr)P("Asset Number","e",`"${an}" is also an Asset Route Number. Routes are asset numbers, so the two can't share a number`,"Asset number also used as a route",null,{s:"rt",rows:rr});
+  if(an){const orgs=X.multi("an",["Asset Number"],"Organization").get(an);if(orgs&&orgs.size>1)P("Asset Number","w",`Also used in org ${[...orgs].filter(x=>x!==o).slice(0,3).join(", ")}. Confirm your instance allows the same asset number in two orgs`,"Asset number used in more than one org",null,{s:"an",rows:X.rowsBy("an",["Asset Number"]).get(an).filter(i=>(S.data.an[i][BYID.an.ix.Organization]||"")!==o)})}
+  const sr=a&&sn&&X.rowsBy("rt",["Organization","Asset Group","Serial Number"]).get(k(o,a,sn));if(sr)P("Serial Number","e",`Serial "${sn}" is also used by a route in asset group "${a}"`,"Serial number shared with a route in the same asset group",null,{s:"rt",rows:sr})}},
+{id:"abom",g:"Foundation",name:"Asset BOM",nav:"Asset group bill of material",
+ fields:[O(),f("Asset Group","t",40,1,{ref:rAG}),f("Component","t",40,1,{lk:"items"}),f("Quantity","n",0,1,{min:0}),f("From","t",30,1),f("To","t",30)],keys:[["Organization","Asset Group","Component"]]},
+{id:"attg",g:"Attributes",name:"Attribute Group",nav:"Setup > Flexfields > Descriptive > Segments (Inventory, Asset Attributes)",
+ fields:[f("Attribute Group","t",30,1),f("Name","t",80,1,{def:"=Attribute Group"}),f("Description","t",240)],keys:[["Attribute Group"]]},
+{id:"attf",g:"Attributes",name:"Attribute Fields",nav:"Asset Attributes > Segments. Max 20 character, 10 numeric, 10 date columns per group.",
+ fields:[f("Attribute Group","t",30,1,{ref:rAttG}),f("Field Name","t",30,1),f("Prompt","t",80,1,{def:"=Field Name"}),f("Column","e",13,1,{en:ATTR_COLS}),f("Length","n",0,1,{min:1,max:150}),f("Required","yn")],
+ keys:[["Attribute Group","Field Name"],{f:["Attribute Group","Column"],msg:"Column already used in this attribute group"}]},
+{id:"atta",g:"Attributes",name:"Attribute Assignment",nav:"Setup > Attribute Assignments",
+ fields:[O(),f("Asset Group","t",40,1,{ref:rAG}),f("Attribute Group","t",30,1,{ref:rAttG})],keys:[["Organization","Asset Group","Attribute Group"]]},
+{id:"attv",g:"Attributes",name:"Attribute Values",nav:"Asset Numbers > Attributes button",
+ fields:[O(),f("Asset Number","t",30,1,{ref:rAssetOnly("Asset Number")}),f("Attribute Group","t",30,1,{ref:rAttG})].concat([...Array(20)].map((_,i)=>f("CAttribute"+(i+1),"t",150)),[...Array(10)].map((_,i)=>f("NAttribute"+(i+1),"n")),[...Array(10)].map((_,i)=>f("DAttribute"+(i+1),"d"))),
+ keys:[["Organization","Asset Number","Attribute Group"]],
+ rule(g,P,X){const o=g("Organization"),a=g("Asset Number"),grp=g("Attribute Group");if(!a||!grp)return;
+  const ag=X.map("an",["Organization","Asset Number"],"Asset Group").get(k(o,a));
+  if(ag&&!X.set("atta",["Organization","Asset Group","Attribute Group"]).has(k(o,ag,grp)))P("Attribute Group","e",`Attribute group "${grp}" isn't assigned to asset group "${ag}"`,"Attribute group not assigned to the asset's group",{s:"atta",v:{Organization:o,"Asset Group":ag,"Attribute Group":grp}});
+  if(ag==="")P("Asset Number","w","Asset has no asset group on Asset Numbers, so the attribute group assignment can't be checked","Attribute assignment not checked (asset has no asset group)");
+  const defs=X.set("attf",["Attribute Group","Column"]);const lens=X.map("attf",["Attribute Group","Column"],"Length");
+  if(!X.set("attf",["Attribute Group"]).has(grp)){let any=false;for(const p of ["C","N","D"]){const n=p==="C"?20:10;for(let i=1;i<=n;i++)if(g(p+"Attribute"+i))any=true}
+    if(any)P("Attribute Group","w",`No fields defined for group "${grp}" on Attribute Fields, so these values can't be checked`,"Attribute values not checked (group has no fields defined)");return}
+  for(const p of ["C","N","D"]){const n=p==="C"?20:10;for(let i=1;i<=n;i++){const fld=p+"Attribute"+i;const v=g(fld);if(!v)continue;const col=p+"_ATTRIBUTE"+i;
+    if(!defs.has(k(grp,col)))P(fld,"w",`No field is defined on ${col} for group "${grp}"`,"Value in an undefined attribute column");
+    else if(p==="C"){const L=+lens.get(k(grp,col));if(L&&v.length>L)P(fld,"e",`${v.length} characters, the field defined on ${col} allows ${L}`,"Attribute value longer than its defined length")}}}
+  const req=X.reqCols(grp);for(const col of req){const fld=col[0]+"Attribute"+col.split("ATTRIBUTE")[1];if(!g(fld))P(fld,"e",`Required by attribute group "${grp}"`,"Required attribute is blank")}}},
+{id:"fc",g:"Failure analysis",name:"Failure Codes",nav:"Failure, cause and resolution codes",
+ fields:[f("Failure Code","t",80,1),f("Code Type","e",10,1,{en:["Failure","Cause","Resolution"]}),f("Description","t",2000,1),f("Effective End Date","d")],keys:[["Failure Code","Code Type"]]},
+{id:"fs",g:"Failure analysis",name:"Failure Sets",fields:[f("Set Name","t",80,1),f("Description","t",2000),f("Effective End Date","d")],keys:[["Set Name"]]},
+{id:"fsa",g:"Failure analysis",name:"Failure Set Associations",nav:"A set can cover several asset groups",
+ fields:[f("Set Name","t",80,1,{ref:rFS}),f("Asset Group","t",40,1,{ref:{s:"ag",m:[["Asset Group","Asset Group"]]}}),f("Failure Code Required Flag","yn")],keys:[["Set Name","Asset Group"]]},
+{id:"fcomb",g:"Failure analysis",name:"Failure Combinations",
+ fields:[f("Set Name","t",80,1,{ref:rFS}),f("Failure Code","t",80,1),f("Cause Code","t",80,1),f("Resolution Code","t",80,1),f("Effective End Date","d")],keys:[["Set Name","Failure Code","Cause Code","Resolution Code"]],
+ rule(g,P,X){const s=X.set("fc",["Failure Code","Code Type"]);for(const [fld,t] of [["Failure Code","Failure"],["Cause Code","Cause"],["Resolution Code","Resolution"]]){const v=g(fld);if(v&&!s.has(k(v,t)))P(fld,"e",`"${v}" isn't on Failure Codes as a ${t} code`,`${fld} not on Failure Codes`,{s:"fc",v:{"Failure Code":v,"Code Type":t}})}}},
+{id:"met",g:"Meters",name:"Meters",
+ fields:[f("Name","t",50,1),f("Description","t",240),f("Type","e",8,1,{en:["Absolute","Change"]}),f("UOM","t",30,1,{lk:"uom"}),f("Value Change","e",11,1,{en:["Ascending","Descending","Fluctuating"]}),f("Used In Scheduling","yn"),f("Required","yn"),f("Rate (per day)","n"),f("Number of Past Readings","n"),f("Initial Reading","n"),f("Initial Read Date","d"),f("Effective From","d"),f("Effective To","d",0,0,{after:"Effective From"})],keys:[["Name"]]},
+{id:"mas",g:"Meters",name:"Meter Asset Association",fields:[O(),f("Meter Name","t",50,1,{ref:rMeter("Meter Name")}),f("Asset Number","t",30,1,{ref:rAssetOnly("Asset Number")})],keys:[["Organization","Meter Name","Asset Number"]]},
+{id:"mr",g:"Meters",name:"Meter Readings",
+ fields:[f("Meter Name","t",50,1,{ref:rMeter("Meter Name")}),f("Date of Reading","dt",0,1),f("Reading Value","n",0,1),f("Reset Flag","yn"),f("Reading Before Reset","n"),f("Reset Comments","t")],keys:[["Meter Name","Date of Reading"]],
+ rule(g,P){if(g("Reset Flag")!=="Y")for(const x of ["Reading Before Reset","Reset Comments"])if(g(x))P(x,"w","Only used when Reset Flag is Y","Reset detail without Reset Flag")}},
+{id:"rt",g:"Routes",name:"Asset Route",nav:"One header row per route. Stops go on Asset Route List.",
+ fields:[f("Asset Route Number","t",30,1),f("Route Description","t",240),f("Asset Group","t",40,1,{ref:rAG}),f("Serial Number","t",30,1),f("Asset Category","t",40,0,{ref:rCat("Asset Category")}),O(),f("Owning Department","t",10,0,{lk:"depts"}),f("Area","t",30,0,{ref:rArea}),f("Asset Criticality Code","t",80,0,{lk:"crit"}),f("WIP Accounting Class Code","t",10,0,{lk:"wip"}),f("Maintainable Flag","yn"),f("Operational Flag","yn"),f("Warranty Expiry Date","d")],
+ keys:[{f:["Organization","Asset Route Number"],msg:"Route header repeats. Keep one row per route and list its stops on Asset Route List."},{f:["Organization","Asset Group","Serial Number"],msg:"Serial number repeats within this asset group"}],
+ rule(g,P,X){const o=g("Organization"),r=g("Asset Route Number"),ag=g("Asset Group"),sn=g("Serial Number");
+  const ar=r&&X.rowsBy("an",["Asset Number"]).get(r);if(ar)P("Asset Route Number","e",`"${r}" is also on Asset Numbers. A route number is an asset number and must be unique`,"Route number also used as an asset number",null,{s:"an",rows:ar});
+  if(r){const orgs=X.multi("rt",["Asset Route Number"],"Organization").get(r);if(orgs&&orgs.size>1)P("Asset Route Number","e",`Also used as a route in org ${[...orgs].filter(x=>x!==o).slice(0,3).join(", ")}. Oracle requires route asset numbers to be unique across orgs`,"Route number used in more than one org",null,{s:"rt",rows:X.rowsBy("rt",["Asset Route Number"]).get(r).filter(i=>(S.data.rt[i][BYID.rt.ix.Organization]||"")!==o)})}
+  const sa=ag&&sn&&X.rowsBy("an",["Organization","Asset Group","Serial Number"]).get(k(o,ag,sn));if(sa)P("Serial Number","e",`Serial "${sn}" is also used by an asset in asset group "${ag}"`,"Serial number shared with an asset in the same asset group",null,{s:"an",rows:sa});if(o&&r&&!X.set("rl",["Organization","Route Asset Number"]).has(k(o,r)))P("Asset Route Number","w","Route has no stops on Asset Route List","Route has no stops")}},
+{id:"rl",g:"Routes",name:"Asset Route List",
+ fields:[O(),f("Route Asset Number","t",30,1,{ref:{s:"rt",m:[["Organization","Organization"],["Asset Route Number","Route Asset Number"]]}}),f("Asset Number","t",30,1,{ref:rAssetOnly("Asset Number")}),f("Effective From Date","d"),f("Effective To Date","d",0,0,{after:"Effective From Date"})],
+ keys:[["Organization","Route Asset Number","Asset Number"]]},
+{id:"act",g:"Activities",name:"Activity",nav:"Activity header. Template must be a defined item template.",
+ fields:[O(),f("Activity Name","t",40,1),f("Description","t",240,1),f("Template Name","t",30,1,{lk:"templates"}),f("Activity Type","t",80,0,{lk:"act_type"}),f("Shutdown","t",80,0,{lk:"shutdown"}),f("Activity Cause","t",80,0,{lk:"act_cause"}),f("Activity Source","t",80,0,{lk:"act_source"}),f("Notification","yn")],
+ keys:[{f:["Organization","Activity Name"],msg:"Activity defined more than once. One header per activity, so one Type, Cause and Source."}],
+ rule(g,P,X){const o=g("Organization"),a=g("Activity Name");if(o&&a&&!X.set("aop",["Organization","Activity Name"]).has(k(o,a)))P("Activity Name","w","No operations on Activity Operation","Activity has no operations")}},
+{id:"aop",g:"Activities",name:"Activity Operation",
+ fields:[O(),f("Activity Name","t",40,1,{ref:rAct("Activity Name")}),f("Operation Sequence Number","n",0,1,{min:1}),f("Setname","t",30),f("Department","t",10,1,{lk:"depts"}),f("Description","t",240),f("Long Description","t",4000)],
+ keys:[["Organization","Activity Name","Operation Sequence Number"]],
+ rule(g,P,X){const o=g("Organization"),a=g("Activity Name"),s=g("Operation Sequence Number");if(o&&a&&s&&!X.set("ares",["Organization","Activity Name","Operation Sequence Number"]).has(k(o,a,s)))P("Operation Sequence Number","w","No resource on Activity Resource for this operation","Operation has no resource")}},
+{id:"ares",g:"Activities",name:"Activity Resource",
+ fields:[O(),f("Activity Name","t",40,1,{ref:rAct("Activity Name")}),f("Operation Sequence Number","n",0,1,{ref:rOp("Activity Name","Operation Sequence Number")}),f("Resource Sequence Number","n",0,1,{min:1}),f("Resource Code","t",10,1,{lk:"resources"}),f("Basis","e",5,1,{en:["Item","Lot"],def:"Item"}),f("Assigned Units","n",0,1,{gt0:"e"}),f("Usage","n",0,1,{gt0:"w"})],
+ keys:[["Organization","Activity Name","Operation Sequence Number","Resource Sequence Number"]]},
+{id:"actbom",g:"Activities",name:"Activity BOM",
+ fields:[O(),f("Activity","t",40,1,{ref:rAct("Activity")}),f("Operation Seq","n",0,1,{ref:rOp("Activity","Operation Seq")}),f("Component","t",40,1,{lk:"items"}),f("Quantity","n",0,1,{min:0}),f("From","d"),f("To","d",0,0,{after:"From"})],
+ keys:[["Organization","Activity","Operation Seq","Component"]]},
+{id:"aa",g:"Activities",name:"Activity Association",nav:"Asset Number can be an asset or an asset route",
+ fields:[O(),f("Template Flag","yn"),f("Asset Number","t",30,1,{ref:rAsset("Asset Number")}),f("Activity","t",40,1,{ref:rAct("Activity")}),f("Start Date","d"),f("End Date","d",0,0,{after:"Start Date"}),f("Priority","t",80,0,{lk:"priority"}),f("Activity Cause","t",80,0,{lk:"act_cause"}),f("Activity Type","t",80,0,{lk:"act_type"}),f("Activity Source","t",80,0,{lk:"act_source"}),f("Shutdown","t",80,0,{lk:"shutdown"}),f("Department","t",10,0,{lk:"depts"}),f("Last Service Start","d"),f("Last Service End","d",0,0,{after:"Last Service Start"}),f("Tagging Required","yn"),f("WIP Class","t",10,0,{lk:"wip"}),f("Planner","t",80,0,{lk:"planners"}),f("Work Order Type","t",80,0,{lk:"wo_type",added:true})],
+ keys:[["Organization","Asset Number","Activity"]]},
+{id:"pms",g:"Preventive maintenance",name:"PM Schedule",
+ fields:[O(),f("Schedule Name","t",50,1),f("Set Name","t",80,1,{def:"MAIN"}),f("Asset Number","t",30,1,{ref:rAsset("Asset Number")}),f("Default","yn"),f("Reschedule Manual WO","yn"),f("Run to Failure","yn"),f("Effective From","d"),f("Effective To","d",0,0,{after:"Effective From"}),f("Lead Time In Days","n",0,0,{min:0}),f("Use Last Service","t",20,1),f("Base Date","d"),f("Last Scheduled Start Date","d"),f("To Suggest Next Service","t",10,1),f("Use Date That Comes","e",10,1,{en:["First","Last"]}),f("Work Order Status","t",10,1,{lk:"wo_status"}),f("Generate Next Work Order","yn"),f("Interval Per Cycle","n",0,0,{min:1}),f("Current Cycle","n",0,0,{min:0}),f("Current Interval Count","n",0,0,{min:0}),f("Planner","t",80,0,{lk:"planners"})],
+ keys:[["Organization","Schedule Name"]],
+ rule(g,P,X){const o=g("Organization"),s=g("Schedule Name"),a=g("Asset Number");if(!o||!s)return;const kk=k(o,s);
+  if(a&&!X.set("aa",["Organization","Asset Number"]).has(k(o,a)))P("Asset Number","w","Asset has no activities on Activity Association","Asset has no activity association");
+  if(!X.set("pma",["Organization","Schedule Name"]).has(kk))P("Schedule Name","w","No activity on PM Activity","Schedule has no PM activity");
+  if(!["pmd","pmc","pmr","pml"].some(id=>X.set(id,["Organization","Schedule Name"]).has(kk)))P("Schedule Name","w","No interval rule (Day Interval, Calendar, Run Interval or Date List)","Schedule has no interval rule")}},
+{id:"pma",g:"Preventive maintenance",name:"PM Activity",nav:"Asset and activity must be paired on Activity Association",
+ fields:[O(),f("Schedule Name","t",50,1,{ref:rSched}),f("Activity","t",40,1,{ref:rAct("Activity")}),f("Multiple Interval","n",0,0,{min:1}),f("Repeat in Cycle","yn"),f("Tolerance","n")],
+ keys:[["Organization","Schedule Name","Activity"]],
+ rule(g,P,X){const o=g("Organization"),s=g("Schedule Name"),a=g("Activity");if(!o||!s||!a)return;const asset=X.map("pms",["Organization","Schedule Name"],"Asset Number").get(k(o,s));
+  if(asset&&!X.set("aa",["Organization","Asset Number","Activity"]).has(k(o,asset,a)))P("Activity","e",`Asset "${asset}" and activity "${a}" aren't paired on Activity Association`,"Asset + activity not on Activity Association",{s:"aa",v:{Organization:o,"Asset Number":asset,Activity:a}})}},
+{id:"pmd",g:"Preventive maintenance",name:"PM Day Interval",nav:"Use this sheet or PM Calendar Based for a schedule, not both",
+ fields:[O(),f("Schedule Name","t",50,1,{ref:rSched}),f("Effective From","d"),f("Effective To","d",0,0,{after:"Effective From"}),f("Day Interval","n",0,1,{gt0:"e"})],
+ keys:[["Organization","Schedule Name","Effective From"]],
+ rule(g,P,X){const o=g("Organization"),s=g("Schedule Name");const lr=o&&s&&X.rowsBy("pmc",["Organization","Schedule Name"]).get(k(o,s));if(lr)P("Schedule Name","w","Also has a calendar rule on PM Calendar Based. Keep one.","Schedule on both Day Interval and Calendar",null,{s:"pmc",rows:lr})}},
+{id:"pmc",g:"Preventive maintenance",name:"PM Calendar Based",nav:"Frequency is Weekly, Monthly or Yearly",
+ fields:[O(),f("Schedule Name","t",50,1,{ref:rSched}),f("Effective From","d"),f("Effective To","d",0,0,{after:"Effective From"}),f("Frequency","e",10,1,{en:["Weekly","Monthly","Yearly"],hint:{daily:"Daily isn't a calendar frequency in this template. Load it on PM Day Interval instead."}}),f("Interval","n",0,1,{gt0:"e"}),f("Repeat","e",10,0,{en:["FIRST","SECOND","THIRD","FOURTH","LAST","DayofMon"]}),f("Day No","n",0,0,{min:1,max:31}),f("Day Of Week","e",10,0,{en:["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Day"]}),f("Month","e",10,0,{en:MONTHS})],
+ keys:[["Organization","Schedule Name","Effective From"]],
+ rule(g,P,X){const fr=g("Frequency"),o=g("Organization"),s=g("Schedule Name");
+  if(fr==="Weekly"&&!g("Day Of Week"))P("Day Of Week","e","Weekly needs a Day Of Week","Weekly without Day Of Week");
+  if((fr==="Monthly"||fr==="Yearly")&&!g("Repeat"))P("Repeat","e",fr+" needs Repeat (FIRST to LAST, or DayofMon)","Monthly/Yearly without Repeat");
+  if(fr==="Yearly"&&!g("Month"))P("Month","e","Yearly needs a Month","Yearly without Month");
+  const rp=g("Repeat");if(rp==="DayofMon"&&!g("Day No"))P("Day No","e","DayofMon needs Day No (1 to 31)","DayofMon without Day No");
+  if(rp&&rp!=="DayofMon"&&!g("Day Of Week"))P("Day Of Week","e",`Repeat ${rp} needs a Day Of Week`,"Repeat without Day Of Week");
+  const lr=o&&s&&X.rowsBy("pmd",["Organization","Schedule Name"]).get(k(o,s));if(lr)P("Schedule Name","w","Also has a day interval on PM Day Interval. Keep one.","Schedule on both Day Interval and Calendar",null,{s:"pmd",rows:lr})}},
+{id:"pmr",g:"Preventive maintenance",name:"PM Run Interval",
+ fields:[O(),f("Schedule Name","t",50,1,{ref:rSched}),f("Meter Name","t",50,1,{ref:rMeter("Meter Name")}),f("Effective From","d"),f("Effective To","d",0,0,{after:"Effective From"}),f("Run Interval","n",0,1,{gt0:"e"}),f("Last Service Reading","n")],keys:[["Organization","Schedule Name","Meter Name"]]},
+{id:"pml",g:"Preventive maintenance",name:"PM Date Lists",fields:[O(),f("Schedule Name","t",50,1,{ref:rSched}),f("List Date","d",0,1),f("List Date Description","t",50)],keys:[["Organization","Schedule Name","List Date"]]},
+{id:"att",g:"Other",name:"Attachments",nav:"Asset Attachments point to an asset; Routing and Operation Attachments point to an activity",
+ fields:[O(),f("Asset No/Activity","t",40,1),f("Operation Sequence Number","n"),f("Sequence","n",0,1,{min:1}),f("Category","e",255,1,{en:["Routing Attachments","Operation Attachments","Asset Attachments"]}),f("Title","t",80),f("Description","t",255),f("Data Type","e",10,1,{en:["Short Text","Long Text","Web Page"]}),f("Text","t",32767),f("URL","t",4000)],
+ keys:[["Organization","Asset No/Activity","Category","Operation Sequence Number","Sequence"]],
+ rule(g,P,X){const o=g("Organization"),e=g("Asset No/Activity"),c=g("Category"),dt=g("Data Type");
+  if(e&&c==="Asset Attachments"&&!X.set("an",["Organization","Asset Number"]).has(k(o,e))&&!X.set("rt",["Organization","Asset Route Number"]).has(k(o,e)))P("Asset No/Activity","e",`Asset "${e}" not found on Asset Numbers`,"Attachment asset not found");
+  if(e&&c&&c!=="Asset Attachments"&&!X.set("act",["Organization","Activity Name"]).has(k(o,e)))P("Asset No/Activity","e",`Activity "${e}" not found on Activity`,"Attachment activity not found");
+  if(c==="Operation Attachments"){const s=g("Operation Sequence Number");if(!s)P("Operation Sequence Number","e","Required for Operation Attachments","Operation attachment without sequence");else if(e&&!X.set("aop",["Organization","Activity Name","Operation Sequence Number"]).has(k(o,e,s)))P("Operation Sequence Number","e",`Operation ${s} not found for activity "${e}"`,"Attachment operation not found")}
+  else if(c&&g("Operation Sequence Number"))P("Operation Sequence Number","w","Leave blank unless Category is Operation Attachments","Operation sequence on a non-operation attachment");
+  if((dt==="Short Text"||dt==="Long Text")&&!g("Text"))P("Text","e",dt+" needs Text","Text attachment without text");
+  if(dt==="Short Text"&&g("Text").length>4000)P("Text","e","Short Text is limited to 4,000 characters","Short text over 4,000 characters");
+  if(dt==="Web Page"&&!g("URL"))P("URL","e","Web Page needs a URL","Web page attachment without URL")}}
+];
+const LOOKUPS=[["orgs","Organizations","Inventory organization codes. Every Organization field checks here."],["depts","Departments","Owning, operation and PM departments"],["resources","Resources","Resource codes on Activity Resource"],["wip","WIP accounting classes",""],["crit","Criticality codes",""],["templates","Item templates","Asset Group and Activity templates"],["items","Inventory items","BOM components"],["planners","Planners",""],["act_type","Activity types",""],["act_cause","Activity causes",""],["act_source","Activity sources",""],["shutdown","Shutdown types",""],["priority","Priorities",""],["uom","Units of measure","Meters"],["wo_status","Work order statuses","PM Schedule"],["wo_type","Work order types","Activity Association work order default, for example Routine or Rebuild"],["abbr","Abbreviations","Standard abbreviations such as INSP or PM. When rows are cleaned, matching words in text fields are set to exactly this case."]];
+const LKLABEL=Object.fromEntries(LOOKUPS.map(x=>[x[0],x[1]]));
+const FLAG="Already in Oracle";
+SHEETS.forEach(sh=>sh.fields.push(f(FLAG,"yn",0,0,{tool:true})));
+const LK_USES={};LOOKUPS.forEach(l=>LK_USES[l[0]]=[]);
+SHEETS.forEach(sh=>sh.fields.forEach(fl=>{if(fl.lk)LK_USES[fl.lk].push({sid:sh.id,field:fl.n,len:fl.l})}));
+const LISTS=LOOKUPS.map(([key,label,desc])=>{const len=Math.max(3,...LK_USES[key].map(u=>u.len||0));
+  const fields=key==="orgs"?[f("Code","t",3,1),f("Description","t",240),f("Active","yn")]:key==="abbr"?[f("Code","t",20,1),f("Description","t",240),f("Active","yn")]:[f("Organization","t",3,0,{lk:"orgs"}),f("Code","t",len,1),f("Description","t",240),f("Active","yn")];
+  return {id:"L_"+key,list:key,g:"Reference lists",name:label,nav:(desc?desc+". ":"")+(key==="orgs"?"":"Leave Organization blank for values valid in every org."),fields,keys:[key==="orgs"||key==="abbr"?["Code"]:["Organization","Code"]]}});
+const LGROUPS=[["Activity and work order codes",["act_type","act_cause","act_source","shutdown","priority","wo_type","wo_status"]],["Organization setup",["orgs","depts","resources","wip","planners"]],["Asset and item codes",["crit","templates","items","uom"]],["Text standards",["abbr"]]];
+LISTS.sort((a,b)=>{const gi=x=>LGROUPS.findIndex(g=>g[1].includes(x.list));const pi=x=>LGROUPS[gi(x)][1].indexOf(x.list);return gi(a)-gi(b)||pi(a)-pi(b)});
+LISTS.forEach(L=>L.lg=LGROUPS.find(g=>g[1].includes(L.list))[0]);
+const ALL=SHEETS.concat(LISTS);
+const BYID={};SHEETS.forEach((s,i)=>s.no=i+1);ALL.forEach(s=>{s.ix={};s.fields.forEach((fl,j)=>s.ix[fl.n]=j);BYID[s.id]=s});
+LK_USES.orgs.push(...LISTS.filter(l=>l.list!=="orgs").map(l=>({sid:l.id,field:"Organization",len:3})));
+
+/* ============ state ============ */
+const S={data:{},textRules:{codeCase:"as_typed",flagRepeat:true,flagAllCaps:false},active:"area",view:"all",cleanOnEntry:true,hist:[]};
+ALL.forEach(s=>S.data[s.id]=[]);
+let V={};           // validation results per sheet
+let LSET={};        // lookup sets
+let sel={r:0,c:0,ar:0,ac:0};
+let viewRows=null;  // array of data row indexes when filtered
+let focusRows=null; // rows highlighted by last paste/import
+const RH=28,SPARE=25,RNW=58;
+
+function k(...a){return a.join(SEP)}
+const norm=s=>String(s||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const nfmt=n=>n.toLocaleString("en-US");
+
+/* ============ cleaning ============ */
+function pad(n){return String(n).padStart(2,"0")}
+function mdY(y,m,d){return pad(m)+"/"+pad(d)+"/"+y}
+function validYMD(y,m,d){const dt=new Date(Date.UTC(y,m-1,d));return dt.getUTCFullYear()===y&&dt.getUTCMonth()===m-1&&dt.getUTCDate()===d}
+const MON3={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+function parseDate(v){
+  let m,y,mo,d,t="";
+  const tm=v.match(/[ T](\d{1,2}):(\d{2})(?::\d{2})?(\.\d+)?Z?\s*(am|pm)?$/i);
+  let base=v;if(tm){let h=+tm[1];if(tm[4]){const pm=tm[4].toLowerCase()==="pm";if(pm&&h<12)h+=12;if(!pm&&h===12)h=0}t=pad(h)+":"+tm[2];base=v.slice(0,tm.index)}
+  if((m=base.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/))){mo=+m[1];d=+m[2];y=+m[3]}
+  else if((m=base.match(/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/))){y=+m[1];mo=+m[2];d=+m[3]}
+  else if((m=base.match(/^(\d{1,2})[\-\s]([A-Za-z]{3})[A-Za-z]*[\-\s,]+(\d{2,4})$/))){d=+m[1];mo=MON3[m[2].toLowerCase()];y=+m[3];if(y<100)y+=2000}
+  else if((m=base.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/))){mo=+m[1];d=+m[2];y=2000+(+m[3])}
+  else return null;
+  if(!mo||!validYMD(y,mo,d))return null;
+  return {d:mdY(y,mo,d),t};
+}
+function serialToDate(n){const p=XLSX.SSF.parse_date_code(n);if(!p)return null;return {d:mdY(p.y,p.m,p.d),t:(p.H||p.M)?pad(p.H)+":"+pad(p.M):""}}
+const DESC_RX=/description|^title$|^text$|^url$|comments|^prompt$|^name$/i;
+function isCodeField(fl){return fl.t==="t"&&!fl.tool&&!DESC_RX.test(fl.n)}
+function isDescField(fl){return fl.t==="t"&&!fl.tool&&DESC_RX.test(fl.n)&&!/^url$|^text$/i.test(fl.n)}
+let CANON={},ABBR=null;
+function refCanon(fl,v){const alts=fl.ref.any||[fl.ref];const lo=v.toLowerCase();
+  for(const alt of alts){const tf=alt.m[alt.m.length-1][0];const key=alt.s+"|"+tf;let m=CANON[key];
+    if(!m){m=new Map();const tsh=BYID[alt.s];const X={g:null};for(const row of S.data[alt.s]){if(isBlank(row))continue;let val;
+        if(tsh.ix[tf]!=null)val=row[tsh.ix[tf]];else if(tsh.derive&&tsh.derive[tf]){const g=fld=>{const j=tsh.ix[fld];return j!=null?row[j]||"":""};val=tsh.derive[tf](g)}
+        if(val){const l=val.toLowerCase();if(!m.has(l))m.set(l,val);else if(m.get(l)!==val)m.set(l,null)}}CANON[key]=m}
+    const hit=m.get(lo);if(hit)return hit}return null}
+function abbrList(){if(ABBR)return ABBR;ABBR=[];const L=BYID.L_abbr;if(!L)return ABBR;for(const row of S.data.L_abbr||[]){const c=row[L.ix.Code];if(c&&row[L.ix.Active]!=="N")ABBR.push([new RegExp("(^|[^A-Za-z0-9])("+c.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+")(?=$|[^A-Za-z0-9])","gi"),c])}return ABBR}
+function cleanVal(fl,v){
+  if(v==null)return "";
+  let s=String(v).replace(/\u00a0/g," ").replace(/[\r\n\t]+/g," ").replace(/ {2,}/g," ").trim();
+  if(!s)return "";
+  const t=fl.t;
+  if(t==="yn"){const l=s.toLowerCase();if(["y","yes","true","1","checked","x"].includes(l))return "Y";if(["n","no","false","0","unchecked"].includes(l))return "N";return s}
+  if(t==="e"){const hit=fl.en.find(x=>x.toLowerCase()===s.toLowerCase());return hit||s}
+  if(t==="n"){const dm=s.match(/^(0?[12])\/(\d{1,2})\/1900$/);if(dm){const mo=+dm[1],d=+dm[2];return String(mo===1?d:31+d)}
+    const c=s.replace(/,/g,"");if(/^-?\d*\.?\d+$/.test(c)){return String(Number(Number(c).toPrecision(15)))}return s}
+  if(t==="d"||t==="dt"){
+    let p=null;if(/^\d{4,5}(\.\d+)?$/.test(s)&&+s>10000&&+s<80000)p=serialToDate(+s);else p=parseDate(s);
+    if(p)return t==="dt"&&p.t?p.d+" "+p.t:p.d;return s}
+  if(fl.lk){const L=LSET[fl.lk];if(L){const hit=L.lc.get(s.toLowerCase());if(hit)return hit}}
+  if(t==="t"&&!fl.tool&&!/^url$/i.test(fl.n))for(const [rx,c] of abbrList())s=s.replace(rx,(m0,pre)=>pre+c);
+  if(fl.ref){const c=refCanon(fl,s);if(c)return c}
+  if(S.textRules.codeCase==="upper"&&isCodeField(fl)&&!fl.lk)s=s.toUpperCase();
+  return s;
+}
+function isNum(s){return /^-?\d*\.?\d+$/.test(s)}
+function isDate(s,dt){const m=s.match(dt?/^(\d{2})\/(\d{2})\/(\d{4})( \d{2}:\d{2})?$/:/^(\d{2})\/(\d{2})\/(\d{4})$/);return !!m&&validYMD(+m[3],+m[1],+m[2])}
+function dnum(s){const m=s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);return m?+(m[3]+m[1]+m[2]):null}
+
+/* ============ validation ============ */
+function isBlank(row){for(const v of row)if(v)return false;return true}
+function isFlag(sh,row){const j=sh.ix[FLAG];return j!=null&&row[j]==="Y"}
+function buildLSET(){LSET={};for(const L of LISTS){const sh=L,rows=S.data[L.id];const ci=sh.ix.Code,oi=sh.ix.Organization,di=sh.ix.Description,ai=sh.ix.Active;
+  const by=new Map(),lc=new Map();let n=0,scoped=false;
+  for(const row of rows){if(isBlank(row))continue;const code=row[ci]||"";if(!code)continue;n++;const org=oi!=null?row[oi]||"":"";if(org)scoped=true;
+    let a=by.get(code);if(!a){a=[];by.set(code,a)}a.push({org,desc:di!=null?row[di]||"":"",active:row[ai]!=="N"});if(!lc.has(code.toLowerCase()))lc.set(code.toLowerCase(),code)}
+  if(n)LSET[L.list]={by,lc,n,scoped}}}
+function lkCheck(key,v,org){const L=LSET[key];if(!L)return null;const a=L.by.get(v);const lbl=LKLABEL[key];
+  if(!a)return {msg:`"${v}" isn't on the ${lbl} list`,label:"not on the "+lbl+" list"};
+  const m=a.filter(x=>!x.org||!org||x.org===org);
+  if(!m.length)return {msg:`"${v}" is on the ${lbl} list for org ${[...new Set(a.map(x=>x.org))].slice(0,4).join(", ")}, not org ${org}`,label:"on the "+lbl+" list for a different org"};
+  if(!m.some(x=>x.active))return {msg:`"${v}" is inactive on the ${lbl} list`,label:"inactive on the "+lbl+" list"};
+  return null}
+function buildCtx(){
+  const cache=new Map();
+  const getter=(sh,row)=>fld=>{const j=sh.ix[fld];if(j!=null)return row[j]||"";if(sh.derive&&sh.derive[fld])return sh.derive[fld](getter(sh,row));return ""};
+  const X={
+    set(id,fields){const key="s|"+id+"|"+fields.join("|");let s=cache.get(key);if(s)return s;s=new Set();const sh=BYID[id];
+      for(const row of S.data[id]){if(isBlank(row))continue;const g=getter(sh,row);s.add(fields.map(g).join(SEP))}cache.set(key,s);return s},
+    setLC(id,fields){const key="l|"+id+"|"+fields.join("|");let s=cache.get(key);if(s)return s;s=new Set([...X.set(id,fields)].map(x=>x.toLowerCase()));cache.set(key,s);return s},
+    map(id,kf,vf){const key="m|"+id+"|"+kf.join("|")+">"+vf;let m=cache.get(key);if(m)return m;m=new Map();const sh=BYID[id];
+      for(const row of S.data[id]){if(isBlank(row))continue;const g=getter(sh,row);const kk=kf.map(g).join(SEP);if(!m.has(kk))m.set(kk,g(vf))}cache.set(key,m);return m},
+    rows(id){return S.data[id].some(r=>!isBlank(r))},
+    rowsBy(id,kf){const key="r|"+id+"|"+kf.join("|");let m=cache.get(key);if(m)return m;m=new Map();const sh=BYID[id];
+      S.data[id].forEach((row,i)=>{if(isBlank(row))return;const kk=kf.map(getter(sh,row)).join(SEP);let a=m.get(kk);if(!a){a=[];m.set(kk,a)}a.push(i)});cache.set(key,m);return m},
+    multi(id,kf,vf){const key="u|"+id+"|"+kf.join("|")+">"+vf;let m=cache.get(key);if(m)return m;m=new Map();const sh=BYID[id];
+      for(const row of S.data[id]){if(isBlank(row))continue;const g=getter(sh,row);const kk=kf.map(g).join(SEP);let st=m.get(kk);if(!st){st=new Set();m.set(kk,st)}st.add(g(vf))}cache.set(key,m);return m},
+    reqCols(grp){const key="rq|"+grp;let a=cache.get(key);if(a)return a;a=[];const sh=BYID.attf;
+      for(const row of S.data.attf){const g=getter(sh,row);if(g("Attribute Group")===grp&&g("Required")==="Y"&&g("Column"))a.push(g("Column"))}cache.set(key,a);return a},
+    getter};
+  return X;
+}
+function validateAll(){
+  buildLSET();CANON={};ABBR=null;
+  const X=buildCtx();V={};
+  for(const sh of ALL){
+    const rows=S.data[sh.id];const res={rows:new Map(),groups:new Map(),e:0,w:0,er:0,wr:0,n:0,nx:0};V[sh.id]=res;
+    const keyF=new Set((Array.isArray(sh.keys[0])?sh.keys[0]:sh.keys[0].f));
+    const add=(r,c,sev,msg,label,fix,link)=>{
+      let ri=res.rows.get(r);if(!ri){ri={sev:"w",cells:new Map(),msgs:[]};res.rows.set(r,ri)}
+      if(sev==="e")ri.sev="e";
+      if(c>=0){let ce=ri.cells.get(c);if(!ce){ce={sev:"w",msgs:[]};ri.cells.set(c,ce)}if(sev==="e")ce.sev="e";ce.msgs.push([sev,msg,link])}else ri.msgs.push([sev,msg,link]);
+      const gk=sev+"|"+label;let gr=res.groups.get(gk);if(!gr){gr={sev,label,rows:[],fixes:new Map()};res.groups.set(gk,gr)}
+      gr.rows.push(r);if(fix){const fk=JSON.stringify(fix);if(!gr.fixes.has(fk))gr.fixes.set(fk,fix)}
+      if(sev==="e")res.e++;else res.w++;};
+    const keyMaps=(sh.keys||[]).map(kd=>{const d=Array.isArray(kd)?{f:kd}:kd;return {d,m:new Map()}});
+    for(let r=0;r<rows.length;r++){
+      const row=rows[r];if(isBlank(row))continue;res.n++;
+      const g=X.getter(sh,row);const flag=isFlag(sh,row);if(flag)res.nx++;
+      const org=sh.ix.Organization!=null&&!sh.list?g("Organization"):"";
+      sh.fields.forEach((fl,c)=>{
+        if(flag&&!keyF.has(fl.n)&&!fl.tool)return;
+        const v=row[c]||"";
+        if(!v){if(fl.r)add(r,c,"e",fl.n+" is required",fl.n+" is required");return}
+        if(fl.t==="t"||fl.t==="e"){if(fl.l&&v.length>fl.l)add(r,c,"e",`${nfmt(v.length)} characters, limit is ${nfmt(fl.l)}`,`${fl.n} over ${fl.l} characters`)}
+        if(fl.t==="n"){if(!isNum(v))add(r,c,"e","Must be a number",fl.n+" isn't a number");else{const x=+v;
+          if(fl.min!=null&&x<fl.min)add(r,c,"e",`Must be ${fl.min} or more`,`${fl.n} below ${fl.min}`);
+          if(fl.max!=null&&x>fl.max)add(r,c,"e",`Must be ${fl.max} or less`,`${fl.n} above ${fl.max}`);
+          if(fl.gt0&&x<=0)add(r,c,fl.gt0,fl.gt0==="e"?"Must be greater than 0":"Is 0. No time or quantity will be planned.",`${fl.n} is 0`)}}
+        if(fl.t==="d"&&!isDate(v))add(r,c,"e","Use mm/dd/yyyy",fl.n+" isn't mm/dd/yyyy");
+        if(fl.t==="dt"&&!isDate(v,true))add(r,c,"e","Use mm/dd/yyyy hh:mm",fl.n+" isn't mm/dd/yyyy hh:mm");
+        if(fl.t==="yn"&&v!=="Y"&&v!=="N")add(r,c,"e","Use Y or N",fl.n+" isn't Y or N");
+        if(fl.t==="e"&&!fl.en.includes(v)){const h=fl.hint&&fl.hint[v.toLowerCase()];add(r,c,"e",h||("Use one of: "+fl.en.slice(0,8).join(", ")+(fl.en.length>8?" …":"")),`${fl.n} not a valid value`)}
+        if(fl.lk){const fx={s:"L_"+fl.lk,v:fl.lk==="orgs"||!org||fl.n==="Organization"?{Code:v}:{Organization:org,Code:v}};
+          if(!LSET[fl.lk])add(r,c,"w",`Not checked: the ${LKLABEL[fl.lk]} list is empty, so "${v}" can't be confirmed`,`${fl.n} not checked (${LKLABEL[fl.lk]} list is empty)`,fx);
+          else{const bad=lkCheck(fl.lk,v,fl.n==="Organization"?"":org);if(bad)add(r,c,"e",bad.msg,`${fl.n} ${bad.label}`,fx)}}
+        if(isDescField(fl)&&!sh.list){const rw=S.textRules.flagRepeat&&v.match(/\b([A-Za-z]{2,})(\s+\1)+\b/i);if(rw)add(r,c,"w",`Repeated word "${rw[1]}"`,`${fl.n}: repeated word`);
+          if(S.textRules.flagAllCaps&&/[A-Z]/.test(v)&&!/[a-z]/.test(v)&&(v.match(/[A-Z]/g)||[]).length>=8)add(r,c,"w","Written in all capitals",`${fl.n}: all capitals`)}
+        if(S.textRules.codeCase==="upper"&&isCodeField(fl)&&!fl.lk&&/[a-z]/.test(v))add(r,c,"w","Should be uppercase under your text rules",`${fl.n}: not uppercase`);
+        if(fl.after){const a=g(fl.after);if(a&&isDate(a)&&isDate(v)&&dnum(v)<dnum(a))add(r,c,"e",`Earlier than ${fl.after}`,`${fl.n} before ${fl.after}`)}
+        if(fl.ref&&!flag)checkRef(fl,g,X,(sev,msg,label,fix)=>add(r,c,sev,msg,label,fix));
+      });
+      for(const km of keyMaps){const vals=km.d.f.map(g);if(vals.some((x,i)=>!x&&(sh.fields[sh.ix[km.d.f[i]]]||{}).r))continue;const kk=vals.join(SEP);const a=km.m.get(kk);if(a)a.push(r);else km.m.set(kk,[r])}
+      if(sh.rule&&!flag)sh.rule(g,(fld,sev,msg,label,fix,link)=>add(r,fld==null?-1:(sh.ix[fld]??-1),sev,msg,label,fix,link),X);
+    }
+    if(!sh.list)sh.fields.forEach((fl,c)=>{if(!isCodeField(fl))return;const vm=new Map();
+      rows.forEach((row,r)=>{const v=row[c];if(!v)return;const l=v.toLowerCase();let e=vm.get(l);if(!e){e=new Map();vm.set(l,e)}let a=e.get(v);if(!a){a=[];e.set(v,a)}a.push(r)});
+      for(const e of vm.values()){if(e.size<2)continue;const forms=[...e.keys()];for(const [v,rs] of e){const others=forms.filter(x=>x!==v).slice(0,3).join(", ");const link=[].concat(...[...e.entries()].filter(([x])=>x!==v).map(([,a])=>a));
+        for(const r of rs)add(r,c,"w",`Same value also typed as ${others}`,`${fl.n}: same value in different letter case`,null,{s:sh.id,rows:link.slice(0,500)})}}});
+    for(const km of keyMaps){for(const list of km.m.values()){if(list.length<2)continue;
+      const c=sh.ix[km.d.f[km.d.f.length-1]];
+      for(const r of list){const others=list.filter(x=>x!==r).slice(0,3).map(x=>x+1).join(", ")+(list.length>4?" …":"");
+        add(r,c,km.d.sev||"e",(km.d.msg||("Duplicate "+km.d.f.join(" + "))).replace(/\.$/,"")+". Also on row "+others,km.d.msg?km.d.msg.split(".")[0]:"Duplicate "+km.d.f.join(" + "),null,{s:sh.id,rows:list.filter(x=>x!==r)})}}}
+    for(const ri of res.rows.values()){if(ri.sev==="e")res.er++;else res.wr++}
+  }
+}
+function checkRef(fl,g,X,add){
+  const ref=fl.ref;const alts=ref.any||[ref];
+  const srcVals=alts[0].m.map(p=>g(p[1]));if(srcVals.some(x=>!x))return;
+  for(const alt of alts){const kk=alt.m.map(p=>g(p[1])).join(SEP);if(X.set(alt.s,alt.m.map(p=>p[0])).has(kk))return}
+  const last=srcVals[srcVals.length-1];
+  const lbl=ref.label||BYID[alts[0].s].name;
+  const orgP=alts[0].m.find(p=>p[0]==="Organization");
+  const caseHit=alts.some(alt=>X.setLC(alt.s,alt.m.map(p=>p[0])).has(alt.m.map(p=>g(p[1])).join(SEP).toLowerCase()));
+  const vals={};alts[0].m.forEach(p=>vals[p[0]]=g(p[1]));
+  add("e",`"${last}" isn't on ${lbl}${orgP?" for org "+g(orgP[1]):""}${caseHit?" (a match exists with different letter case)":""}`,`${fl.n} not found on ${lbl}`,{s:alts[0].s,v:vals});
+}
+
+/* ============ grid ============ */
+const grid=$("grid"),rowsEl=$("rows"),headEl=$("head"),editor=$("editor"),kb=$("kb");
+let colX=[],colW=[],totalW=0;
+function cur(){return BYID[S.active]}
+function colWidth(fl){let w;if(fl.t==="d")w=100;else if(fl.t==="dt")w=132;else if(fl.t==="yn")w=70;else if(fl.t==="n")w=96;else w=Math.min(Math.max((fl.l||30)*6.5,110),280);
+  return Math.round(Math.min(Math.max(w,fl.n.length*7.4+22),300))}
+function layout(){const sh=cur();colX=[];colW=[];let x=RNW;sh.fields.forEach(fl=>{colX.push(x);const w=colWidth(fl);colW.push(w);x+=w});totalW=x}
+function typeLabel(fl){if(fl.t==="d")return "Date";if(fl.t==="dt")return "Date + time";if(fl.t==="yn")return "Y / N";if(fl.t==="n")return "Number";if(fl.t==="e")return "List";if(fl.tool)return "Y = skip load";if(fl.ref)return "Text "+fl.l+", linked";if(fl.lk)return "Text "+fl.l+", list";return fl.l?"Text "+fl.l:"Text"}
+function renderHead(){const sh=cur();let h=`<div class="hc rn" style="width:${RNW}px"></div>`;
+  sh.fields.forEach((fl,c)=>{h+=`<div class="hc" style="width:${colW[c]}px" title="${esc(fl.n+(fl.r?" (required)":"")+(fl.tool?"\nY marks a record that already exists in Oracle: it counts as a valid parent, skips load checks and stays out of the load export":"")+(fl.lk?"\nChecked against the "+LKLABEL[fl.lk]+" list":"")+(fl.added?"\nNot in the original template: added from Oracle's activity association work order defaults":"")+(fl.ref?"\nMust exist on "+(fl.ref.label||BYID[(fl.ref.any||[fl.ref])[0].s].name):""))}"><div class="hn">${fl.r?'<span class="req">* </span>':""}${esc(fl.n)}${fl.added?' <span class="muted" style="font-weight:400">(added)</span>':""}</div><div class="hm">${typeLabel(fl)}</div></div>`});
+  headEl.innerHTML=h;headEl.style.width=totalW+"px"}
+function dataRowCount(){return S.data[S.active].length}
+function viewCount(){return viewRows?viewRows.length:dataRowCount()+SPARE}
+function dr(vr){return viewRows?viewRows[vr]:vr}
+function computeView(){
+  const res=V[S.active];
+  if(S.view==="all"&&!focusRows){viewRows=null}
+  else{const out=[];const rows=S.data[S.active];
+    const src=focusRows?[...focusRows].sort((a,b)=>a-b):rows.map((_,i)=>i);
+    for(const r of src){if(r>=rows.length||isBlank(rows[r]))continue;const ri=res.rows.get(r);
+      if(S.view==="all")out.push(r);else if(S.view==="issues"&&ri)out.push(r);else if(S.view==="errors"&&ri&&ri.sev==="e")out.push(r)}
+    viewRows=out}
+  rowsEl.style.height=viewCount()*RH+"px";rowsEl.style.width=totalW+"px";
+  const n=V[S.active].n;
+  const nx=V[S.active].nx;$("rowcount").textContent=(viewRows?`Showing ${nfmt(viewRows.length)} of ${nfmt(n)} rows`:`${nfmt(n)} rows`)+(nx?`, ${nfmt(nx)} already in Oracle`:"");
+  $("empty").style.display=n||viewRows?"none":"block";
+}
+function renderRows(){
+  const sh=cur(),rows=S.data[S.active],res=V[S.active];
+  const top=grid.scrollTop,hgt=grid.clientHeight;
+  const first=Math.max(0,Math.floor(top/RH)-6),last=Math.min(viewCount()-1,Math.ceil((top+hgt)/RH)+6);
+  const r0=Math.min(sel.r,sel.ar),r1=Math.max(sel.r,sel.ar),c0=Math.min(sel.c,sel.ac),c1=Math.max(sel.c,sel.ac);
+  let h="";
+  for(let vr=first;vr<=last;vr++){const d=dr(vr);const row=rows[d];const ri=res.rows.get(d);const spare=!row;
+    h+=`<div class="r${ri?(ri.sev==="e"?" re":" rw"):""}${spare?" spare":""}${row&&isFlag(sh,row)?" fx":""}" style="top:${vr*RH}px;width:${totalW}px"><div class="c rn" style="width:${RNW}px" data-v="${vr}" data-c="-1"><span>${d+1}</span><span class="sd"></span></div>`;
+    for(let c=0;c<sh.fields.length;c++){const v=row?row[c]||"":"";const ce=ri&&ri.cells.get(c);
+      let cls="c";if(ce)cls+=ce.sev==="e"?" ce":" cw";if(vr>=r0&&vr<=r1&&c>=c0&&c<=c1)cls+=" sel";if(vr===sel.r&&c===sel.c)cls+=" act";
+      if(sh.fields[c].t==="n")cls+=" num";
+      h+=`<div class="${cls}" style="width:${colW[c]}px" data-v="${vr}" data-c="${c}"${ce?` title="${esc(ce.msgs.map(m=>m[1]).join("\n"))}"`:""}>${esc(v)}</div>`}
+    h+="</div>"}
+  rowsEl.innerHTML=h;
+}
+let rq=0;function paint(){if(rq)return;rq=requestAnimationFrame(()=>{rq=0;renderRows();renderStatus()})}
+grid.addEventListener("scroll",()=>{paint();if(editing)posEditor()});
+window.addEventListener("resize",paint);
+
+function renderStatus(){
+  const sh=cur(),d=dr(sel.r);const fl=sh.fields[sel.c];if(!fl){$("status").innerHTML="";return}
+  const row=S.data[S.active][d];const v=row?row[sel.c]||"":"";
+  const ri=V[S.active].rows.get(d);const ce=ri&&ri.cells.get(sel.c);
+  const links=[];const li=m=>{let h=`<li class="${m[0]}">${esc(m[1])}`;const L=m[2];
+    if(L&&L.rows&&L.rows.length){links.push(L);const tsh=BYID[L.s],same=L.s===S.active,n=L.rows.length;
+      const lbl=n===1?(same?`Go to row ${L.rows[0]+1}`:`Go to ${tsh.name} row ${L.rows[0]+1}`):(same?`Show all ${n+1} rows`:`Show ${nfmt(n)} rows on ${tsh.name}`);
+      let pv="";if(n===1){const tr=S.data[L.s][L.rows[0]]||[];pv=tsh.fields.map((fl,i)=>[fl,tr[i]]).filter(([fl,v])=>v&&!fl.tool).slice(0,6).map(([fl,v])=>`${fl.n}: ${v}`).join(", ");if(pv.length>110)pv=pv.slice(0,110)+"…"}
+      h+=` <button class="btn sm" data-lk="${links.length-1}">${esc(lbl)}</button>${pv?` <span class="muted">${esc(pv)}</span>`:""}`}
+    return h+"</li>"};
+  let lis="";if(ce)lis+=ce.msgs.map(li).join("");
+  if(ri&&ri.msgs.length)lis+=ri.msgs.map(li).join("");
+  $("status")._links=links;$("status")._from={s:S.active,d};
+  let meta=fl.l&&(fl.t==="t"||fl.t==="e")?`${v.length} / ${fl.l}`:"";
+  let lk="";if(fl.lk){const L=LSET[fl.lk];lk=`<button class="btn sm" data-openlist="${fl.lk}">${L?"Checked against "+esc(LKLABEL[fl.lk])+" ("+nfmt(L.n)+")":esc(LKLABEL[fl.lk])+" list is empty, not checked"}</button>`}
+  $("status").innerHTML=`<span class="loc">Row ${d==null?"-":d+1}, ${esc(fl.n)}</span><span class="muted">${meta}</span>${lk}<ul>${lis||(row&&!isBlank(row)?'<li class="muted">No issues in this cell</li>':"")}</ul>`;
+}
+function ensureVisible(){
+  const top=sel.r*RH,bottom=top+RH,headH=48;
+  if(top<grid.scrollTop)grid.scrollTop=top;
+  else if(bottom+headH>grid.scrollTop+grid.clientHeight)grid.scrollTop=bottom+headH-grid.clientHeight+2;
+  const x=colX[sel.c],w=colW[sel.c];
+  if(x-RNW<grid.scrollLeft)grid.scrollLeft=x-RNW;
+  else if(x+w>grid.scrollLeft+grid.clientWidth)grid.scrollLeft=x+w-grid.clientWidth+2;
+}
+function move(dr_,dc,extend){
+  const nc=cur().fields.length;
+  sel.r=Math.max(0,Math.min(viewCount()-1,sel.r+dr_));sel.c=Math.max(0,Math.min(nc-1,sel.c+dc));
+  if(!extend){sel.ar=sel.r;sel.ac=sel.c}ensureVisible();paint()}
+function setActive(vr,c,extend){sel.r=vr;sel.c=c;if(!extend){sel.ar=vr;sel.ac=c}paint()}
+
+/* mouse */
+let dragging=false,rowMode=false;
+rowsEl.addEventListener("mousedown",e=>{
+  const cell=e.target.closest(".c");if(!cell)return;e.preventDefault();
+  if(editing)commitEdit();
+  const vr=+cell.dataset.v,c=+cell.dataset.c;
+  if(c<0){if(!e.shiftKey)sel.ar=vr;sel.r=vr;sel.c=0;sel.ac=cur().fields.length-1;rowMode=true;paint();kb.focus();return}
+  rowMode=false;
+  setActive(vr,c,e.shiftKey);dragging=true;kb.focus();
+});
+rowsEl.addEventListener("mousedown",e=>{const cell=e.target.closest(".c");if(cell&&+cell.dataset.c<0)dragging=true},true);
+rowsEl.addEventListener("mouseover",e=>{if(!dragging)return;if(rowMode){const cell=e.target.closest(".c");if(cell){sel.r=+cell.dataset.v;paint()}return}const cell=e.target.closest(".c");if(!cell||+cell.dataset.c<0)return;sel.r=+cell.dataset.v;sel.c=+cell.dataset.c;paint()});
+window.addEventListener("mouseup",()=>dragging=false);
+rowsEl.addEventListener("dblclick",e=>{const cell=e.target.closest(".c");if(!cell||+cell.dataset.c<0)return;startEdit()});
+grid.addEventListener("focus",()=>kb.focus());
+
+/* keyboard */
+kb.addEventListener("keydown",e=>{
+  const ctrl=e.ctrlKey||e.metaKey;
+  if(ctrl&&(e.key==="c"||e.key==="x")){kb.value=copyText();kb.select();if(e.key==="x")setTimeout(clearSel,0);return}
+  if(ctrl&&e.key==="v")return;
+  if(ctrl&&e.key==="z"){e.preventDefault();undo();return}
+  if(ctrl&&e.key==="a"){e.preventDefault();sel.ar=0;sel.ac=0;sel.r=Math.max(0,(viewRows?viewRows.length:dataRowCount())-1);sel.c=cur().fields.length-1;paint();return}
+  const pg=Math.max(1,Math.floor(grid.clientHeight/RH)-2);
+  switch(e.key){
+    case "ArrowUp":e.preventDefault();move(ctrl?-sel.r:-1,0,e.shiftKey);return;
+    case "ArrowDown":e.preventDefault();move(ctrl?(viewRows?viewRows.length:dataRowCount())-1-sel.r:1,0,e.shiftKey);return;
+    case "ArrowLeft":e.preventDefault();move(0,ctrl?-sel.c:-1,e.shiftKey);return;
+    case "ArrowRight":e.preventDefault();move(0,ctrl?99:1,e.shiftKey);return;
+    case "Tab":e.preventDefault();move(0,e.shiftKey?-1:1,false);return;
+    case "Enter":e.preventDefault();move(e.shiftKey?-1:1,0,false);return;
+    case "PageDown":e.preventDefault();move(pg,0,e.shiftKey);return;
+    case "PageUp":e.preventDefault();move(-pg,0,e.shiftKey);return;
+    case "Home":e.preventDefault();move(ctrl?-sel.r:0,-sel.c,e.shiftKey);return;
+    case "End":e.preventDefault();move(0,99,e.shiftKey);return;
+    case "F2":e.preventDefault();startEdit();return;
+    case "Delete":case "Backspace":e.preventDefault();clearSel();return;
+    case "Escape":focusRows=null;hideResult();refresh();return;
+  }
+  if(!ctrl&&!e.altKey&&e.key.length===1){e.preventDefault();startEdit(e.key)}
+});
+kb.addEventListener("paste",e=>{e.preventDefault();const t=e.clipboardData.getData("text/plain");if(t)pasteText(t)});
+
+/* editing */
+let editing=false;
+function posEditor(){editor.style.left=colX[sel.c]+"px";editor.style.top=(48+sel.r*RH)+"px";editor.style.width=colW[sel.c]+"px"}
+function startEdit(ch){
+  if(sel.c<0)return;const sh=cur(),fl=sh.fields[sel.c],d=dr(sel.r);if(d==null)return;
+  const row=S.data[S.active][d];editing=true;posEditor();
+  editor.value=ch!=null?ch:(row?row[sel.c]||"":"");
+  fillDatalist(fl);editor.style.display="block";editor.focus();
+  const n=editor.value.length;editor.setSelectionRange(n,n);
+}
+function fillDatalist(fl){
+  let opts=[];if(fl.t==="e")opts=fl.en;else if(fl.t==="yn")opts=["Y","N"];
+  else if(fl.lk&&LSET[fl.lk]){const sh=cur(),row=S.data[S.active][dr(sel.r)]||[];const org=sh.ix.Organization!=null&&!sh.list?row[sh.ix.Organization]||"":"";
+    const out=[];for(const [code,a] of LSET[fl.lk].by){const m=a.filter(x=>x.active&&(!x.org||!org||x.org===org));if(m.length)out.push([code,m[0].desc]);if(out.length>=600)break}
+    $("dl").innerHTML=out.map(o=>`<option value="${esc(o[0])}"${o[1]?` label="${esc(o[1])}"`:""}>`).join("");return}
+  else if(fl.ref){const alt=(fl.ref.any||[fl.ref])[0];const tf=alt.m[alt.m.length-1][0];const tsh=BYID[alt.s];const X=buildCtx();const s=new Set();
+    for(const row of S.data[alt.s]){if(isBlank(row))continue;const v=X.getter(tsh,row)(tf);if(v)s.add(v);if(s.size>400)break}
+    opts=[...s]}
+  $("dl").innerHTML=opts.slice(0,600).map(o=>`<option value="${esc(o)}">`).join("");
+}
+function commitEdit(){if(!editing)return;editing=false;editor.style.display="none";
+  const d=dr(sel.r);setCells([[d,sel.c,editor.value]],"Edit");kb.focus()}
+function cancelEdit(){editing=false;editor.style.display="none";kb.focus()}
+editor.addEventListener("keydown",e=>{
+  if(e.key==="Enter"){e.preventDefault();commitEdit();move(e.shiftKey?-1:1,0)}
+  else if(e.key==="Tab"){e.preventDefault();commitEdit();move(0,e.shiftKey?-1:1)}
+  else if(e.key==="Escape"){e.preventDefault();cancelEdit()}
+  else if(e.key==="ArrowUp"||e.key==="ArrowDown"){if(!$("dl").options.length){e.preventDefault();commitEdit();move(e.key==="ArrowUp"?-1:1,0)}}
+});
+editor.addEventListener("blur",()=>{if(editing)commitEdit()});
+
+/* data mutation */
+function ensureRow(d){const rows=S.data[S.active],n=cur().fields.length;while(rows.length<=d)rows.push(new Array(n).fill(""))}
+function setCells(changes,label,opts){
+  const sh=cur(),rows=S.data[S.active];const undoList=[];const before=rows.length;
+  for(const [d,c,raw] of changes){if(d==null||c<0||c>=sh.fields.length)continue;ensureRow(d);
+    const v=S.cleanOnEntry?cleanVal(sh.fields[c],raw):String(raw==null?"":raw);
+    if((rows[d][c]||"")!==v){undoList.push([d,c,rows[d][c]||""]);rows[d][c]=v}}
+  if(!undoList.length&&rows.length===before)return 0;
+  pushHist({sheet:S.active,type:"cells",list:undoList,len:before,label});
+  trimTail(S.active);changed(opts);return undoList.length;
+}
+function trimTail(id){const rows=S.data[id];while(rows.length&&isBlank(rows[rows.length-1]))rows.pop()}
+function clearSel(){const r0=Math.min(sel.r,sel.ar),r1=Math.max(sel.r,sel.ar),c0=Math.min(sel.c,sel.ac),c1=Math.max(sel.c,sel.ac);const ch=[];
+  for(let vr=r0;vr<=r1;vr++){const d=dr(vr);if(d==null||d>=dataRowCount())continue;for(let c=c0;c<=c1;c++)ch.push([d,c,""])}setCells(ch,"Clear")}
+function copyText(){const r0=Math.min(sel.r,sel.ar),r1=Math.max(sel.r,sel.ar),c0=Math.min(sel.c,sel.ac),c1=Math.max(sel.c,sel.ac);const out=[];
+  for(let vr=r0;vr<=r1;vr++){const row=S.data[S.active][dr(vr)]||[];const a=[];for(let c=c0;c<=c1;c++){let v=row[c]||"";if(/[\t\n"]/.test(v))v='"'+v.replace(/"/g,'""')+'"';a.push(v)}out.push(a.join("\t"))}return out.join("\n")}
+function pushHist(h){S.hist.push(h);if(S.hist.length>40)S.hist.shift();$("bUndo").disabled=false}
+function undo(){const h=S.hist.pop();$("bUndo").disabled=!S.hist.length;if(!h)return;
+  if(h.type==="cells"){const rows=S.data[h.sheet];const n=BYID[h.sheet].fields.length;for(let i=h.list.length-1;i>=0;i--){const [d,c,v]=h.list[i];while(rows.length<=d)rows.push(new Array(n).fill(""));rows[d][c]=v}trimTail(h.sheet)}
+  else if(h.type==="snap"){for(const id in h.snap)S.data[id]=h.snap[id]}
+  if(h.sheet&&h.sheet!==S.active)openSheet(h.sheet);changed();toast("Undid: "+h.label)}
+function snapshot(ids,label){const snap={};ids.forEach(id=>snap[id]=S.data[id].map(r=>r.slice()));pushHist({type:"snap",snap,sheet:ids.length===1?ids[0]:null,label})}
+
+/* paste */
+function parseDelimited(t,delim){const rows=[];let row=[],cell="",q=false;
+  for(let i=0;i<t.length;i++){const ch=t[i];
+    if(q){if(ch==='"'){if(t[i+1]==='"'){cell+='"';i++}else q=false}else cell+=ch}
+    else if(ch==='"'&&cell===""){q=true}
+    else if(ch===delim){row.push(cell);cell=""}
+    else if(ch==="\n"){row.push(cell);rows.push(row);row=[];cell=""}
+    else if(ch!=="\r")cell+=ch}
+  row.push(cell);rows.push(row);
+  while(rows.length&&rows[rows.length-1].every(x=>x===""))rows.pop();return rows}
+function headerMap(cells,sh){const map=[];let hits=0,filled=0;cells.forEach((h,i)=>{if(String(h).trim())filled++;const j=sh.fields.findIndex(fl=>norm(fl.n)===norm(h));map.push(j);if(j>=0)hits++});
+  return hits>=2&&hits>=filled*0.5?map:null}
+function pasteText(t){
+  const sh=cur();let data=parseDelimited(t,"\t");if(!data.length)return;
+  let colmap=null;const hm=headerMap(data[0],sh);if(hm){colmap=hm;data=data.slice(1)}
+  const top=Math.min(sel.r,sel.ar),left=Math.min(sel.c,sel.ac);
+  const startD=dr(top)??dataRowCount();const changes=[];const touched=new Set();
+  let extra=dataRowCount();
+  data.forEach((cells,i)=>{let d;
+    if(viewRows){d=i+top<viewRows.length?viewRows[top+i]:extra++}else d=startD+i;
+    touched.add(d);
+    cells.forEach((v,j)=>{const c=colmap?colmap[j]:left+j;if(c==null||c<0||c>=sh.fields.length)return;changes.push([d,c,v])})});
+  if(data.length===1&&data[0].length===1&&!colmap){const r0=Math.min(sel.r,sel.ar),r1=Math.max(sel.r,sel.ar),c0=Math.min(sel.c,sel.ac),c1=Math.max(sel.c,sel.ac);
+    if(r1>r0||c1>c0){changes.length=0;touched.clear();for(let vr=r0;vr<=r1;vr++){const d=dr(vr);touched.add(d);for(let c=c0;c<=c1;c++)changes.push([d,c,data[0][0]])}}}
+  setCells(changes,"Paste");
+  entryResult(`Pasted ${nfmt(touched.size)} row${touched.size===1?"":"s"}${colmap?" (columns matched by header)":""} into ${sh.name}`,touched);
+}
+function entryResult(title,touched){
+  const res=V[S.active];let e=0,w=0,ok=0;for(const d of touched){const row=S.data[S.active][d];if(!row||isBlank(row))continue;const ri=res.rows.get(d);if(!ri)ok++;else if(ri.sev==="e")e++;else w++}
+  const el=$("result");el.className="result show "+(e?"bad":w?"mid":"good");
+  el.innerHTML=`<strong>${esc(title)}</strong><span>${nfmt(ok)} clean</span>${e?`<span style="color:var(--err)">${nfmt(e)} with errors</span>`:""}${w?`<span style="color:var(--warn)">${nfmt(w)} with warnings</span>`:""}${e||w?`<button class="btn sm" id="rFocus">Show only these rows</button>`:""}<button class="x" aria-label="Dismiss" id="rX">×</button>`;
+  const set=new Set([...touched].filter(d=>{const ri=res.rows.get(d);return !!ri}));
+  if($("rFocus"))$("rFocus").onclick=()=>{focusRows=set;S.view="all";$("fView").value="all";sel={r:0,c:0,ar:0,ac:0};grid.scrollTop=0;refresh();el.querySelector("#rFocus").outerHTML='<button class="btn sm" id="rAll">Show all rows</button>';$("rAll").onclick=()=>{focusRows=null;refresh();hideResult()}};
+  $("rX").onclick=()=>{focusRows=null;hideResult();refresh()};
+}
+function hideResult(){$("result").className="result"}
+
+/* ============ rendering shells ============ */
+function renderRail(){
+  let h="",lastG="";
+  const stn=(sh,dot)=>{const r=V[sh.id];const st=r.e?"e":r.w?"w":r.n?"has":"";
+    return `<button class="stn ${st}${S.active===sh.id?" on":""}" data-id="${sh.id}"><span class="dot">${dot}</span><span class="nm">${esc(sh.name)}</span><span class="ct">${r.n?nfmt(r.n):""}${r.er?` <b>${nfmt(r.er)}</b>`:""}${!r.er&&r.wr?` <i>${nfmt(r.wr)}</i>`:""}</span></button>`};
+  const tot=SHEETS.reduce((a,x)=>a+V[x.id].n,0),te=SHEETS.reduce((a,x)=>a+V[x.id].er,0);
+  h+=`<button class="stn${te?" e":tot?" has":""}${S.active==="_summary"?" on":""}" data-id="_summary"><span class="dot">S</span><span class="nm">Summary of findings</span><span class="ct">${te?`<b>${nfmt(te)}</b>`:""}</span></button>`;
+  for(const sh of SHEETS){if(sh.g!==lastG){h+=`<h3>${esc(sh.g)}</h3>`;lastG=sh.g}h+=stn(sh,sh.no)}
+  const ln=LISTS.filter(l=>V[l.id].n).length;
+  h+=`<h3>Reference lists</h3><button class="stn${S.active==="_lists"?" on":""}" data-id="_lists"><span class="dot">R</span><span class="nm">Overview and gaps</span><span class="ct">${ln?ln+" of "+LISTS.length+" in use":""}</span></button>`;
+  let lg="";for(const L of LISTS){if(L.lg!==lg){h+=`<h3 style="margin-left:26px">${esc(L.lg)}</h3>`;lg=L.lg}h+=stn(L,"L")}
+  $("rail").innerHTML=h;
+  $("mobsel").innerHTML=`<option value="_summary"${S.active==="_summary"?" selected":""}>Summary of findings</option>`+SHEETS.map(s=>`<option value="${s.id}"${s.id===S.active?" selected":""}>${s.no}. ${esc(s.name)}${V[s.id].er?" ("+V[s.id].er+" errors)":""}</option>`).join("")+`<option value="_lists"${S.active==="_lists"?" selected":""}>Reference lists: overview</option>`+LISTS.map(l=>`<option value="${l.id}"${l.id===S.active?" selected":""}>${esc(l.lg)}: ${esc(l.name)}</option>`).join("");
+}
+$("rail").addEventListener("click",e=>{const b=e.target.closest(".stn");if(b)openSheet(b.dataset.id)});
+$("mobsel").addEventListener("change",e=>openSheet(e.target.value));
+
+function renderIssues(){
+  const el=$("issues");
+  if(S.active==="_summary"){el.innerHTML=`<h2>All sheets</h2>`+allSheetsTable().replace('<h3>All sheets</h3>','');bindAll();return}
+  if(S.active==="_lists"){let tg=0,unchecked=0;for(const L of LISTS){const G=listGaps(L.list);if(LSET[L.list])tg+=G.gaps.length;else if(G.distinct)unchecked++}
+    el.innerHTML=`<h2>How lists connect</h2><p class="muted" style="font-size:13.5px">Each list holds valid Oracle values. Every field shown under "Used by" is checked against it as rows are typed, pasted or imported. Leave Organization blank on a list row to make it valid in every org; fill it to limit the value to that org. Active = N makes a value invalid.</p><div class="tally"><span class="te"><b>${nfmt(tg)}</b>values not on their list</span><span><b>${unchecked}</b>lists empty but used</span></div>`+allSheetsTable();bindAll();return}
+  const r=V[S.active];const sh=cur();
+  let h=`<h2>Issues on ${esc(sh.name)}${sh.list?" list":""}</h2><div class="tally"><span class="te"><b>${nfmt(r.e)}</b>errors</span><span class="tw"><b>${nfmt(r.w)}</b>warnings</span><span><b>${nfmt(r.er+r.wr)}</b>rows affected</span></div>`;
+  const groups=[...r.groups.values()].sort((a,b)=>(a.sev===b.sev?b.rows.length-a.rows.length:a.sev==="e"?-1:1));
+  if(!groups.length)h+=r.n?`<div class="clean-ok">All ${nfmt(r.n)} rows pass.</div>`:`<p class="muted" style="font-size:13.5px">Nothing to check yet.</p>`;
+  groups.forEach((gr,i)=>{const nFix=gr.fixes.size;const tgt=nFix?BYID[[...gr.fixes.values()][0].s]:null;
+    h+=`<div class="grp ${gr.sev}"><div class="gt"><span class="sv"></span><span class="gl">${esc(gr.label)}</span><span class="gn">${nfmt(gr.rows.length)}</span></div><div class="ga"><button class="btn sm" data-next="${i}">Next</button><button class="btn sm" data-only="${i}">Show rows</button>${nFix?`<button class="btn sm" data-fix="${i}" title="Adds the missing key values as new rows so you can finish them there">Add ${nfmt(nFix)} to ${esc(tgt.name)}</button>`:""}</div></div>`});
+  h+=allSheetsTable();el.innerHTML=h;el._groups=groups;bindAll();
+}
+function allSheetsTable(){let t=`<div class="allsheets"><h3>All sheets</h3><table>`;let te=0,tw=0;
+  for(const sh of ALL){const r=V[sh.id];if(!r.n)continue;te+=r.e;tw+=r.w;t+=`<tr data-go="${sh.id}"><td>${sh.no?sh.no+". ":"List: "}${esc(sh.name)}</td><td class="n">${nfmt(r.n)}</td><td class="n e">${r.e?nfmt(r.e):""}</td><td class="n w">${r.w?nfmt(r.w):""}</td></tr>`}
+  return t+`</table><p class="muted" style="font-size:12.5px;margin:6px 0 0">Columns: rows, errors, warnings. ${nfmt(te)} errors and ${nfmt(tw)} warnings in total.</p></div>`}
+const cursor={};
+function bindAll(){const el=$("issues");
+  el.querySelectorAll("[data-go]").forEach(tr=>tr.onclick=()=>openSheet(tr.dataset.go));
+  el.querySelectorAll("[data-next]").forEach(b=>b.onclick=()=>{const gr=el._groups[+b.dataset.next];const key=S.active+gr.label;
+    if(viewRows||focusRows){focusRows=null;S.view="all";$("fView").value="all";refresh()}
+    let i=(cursor[key]??-1)+1;if(i>=gr.rows.length)i=0;cursor[key]=i;const d=gr.rows[i];
+    const ri=V[S.active].rows.get(d);let c=0;if(ri)for(const [cc,ce] of ri.cells){if(ce.msgs.some(m=>m[1]&&m[0]===gr.sev)){c=cc;break}}
+    sel={r:d,c,ar:d,ac:c};ensureVisible();paint();kb.focus()});
+  el.querySelectorAll("[data-only]").forEach(b=>b.onclick=()=>{const gr=el._groups[+b.dataset.only];focusRows=new Set(gr.rows);S.view="all";$("fView").value="all";sel={r:0,c:0,ar:0,ac:0};grid.scrollTop=0;refresh();
+    const el2=$("result");el2.className="result show mid";el2.innerHTML=`<strong>Showing ${nfmt(new Set(gr.rows).size)} rows: ${esc(gr.label)}</strong><button class="btn sm" id="rAll">Show all rows</button>`;$("rAll").onclick=()=>{focusRows=null;hideResult();refresh()}});
+  el.querySelectorAll("[data-fix]").forEach(b=>b.onclick=()=>addStubs(el._groups[+b.dataset.fix]));
+}
+function addStubs(gr){
+  const fixes=[...gr.fixes.values()];const tid=fixes[0].s;const tsh=BYID[tid];
+  snapshot([tid],"Add missing rows to "+tsh.name);
+  const X=buildCtx();const have=new Set(S.data[tid].filter(r=>!isBlank(r)).map(r=>{const g=X.getter(tsh,r);return JSON.stringify(Object.keys(fixes[0].v).map(g))}));
+  let n=0;for(const fx of fixes){const key=JSON.stringify(Object.keys(fx.v).map(kk=>fx.v[kk]));if(have.has(key))continue;have.add(key);
+    const row=new Array(tsh.fields.length).fill("");
+    for(const [fld,val] of Object.entries(fx.v)){if(tsh.ix[fld]!=null)row[tsh.ix[fld]]=val;else if(tsh.split&&tsh.split[fld]){const parts=tsh.split[fld](val);for(const p in parts)row[tsh.ix[p]]=parts[p]}}
+    S.data[tid].push(row);n++}
+  changed();toast(`Added ${nfmt(n)} rows to ${tsh.name}. Finish the required fields there.`,()=>openSheet(tid),"Go to "+tsh.name);
+}
+
+
+/* ============ Summary of findings ============ */
+function summaryData(){
+  const sheets=[];let T={rows:0,ready:0,err:0,warn:0,flag:0};
+  for(const sh of SHEETS){const res=V[sh.id];if(!res.n)continue;let ready=0,err=0,warn=0,flag=0;
+    S.data[sh.id].forEach((row,r)=>{if(isBlank(row))return;if(isFlag(sh,row)){flag++;return}const ri=res.rows.get(r);if(ri&&ri.sev==="e")err++;else{ready++;if(ri)warn++}});
+    const gs=[...res.groups.values()].sort((a,b)=>(a.sev===b.sev?b.rows.length-a.rows.length:a.sev==="e"?-1:1));
+    sheets.push({sh,n:res.n,ready,err,warn,flag,top:gs[0]||null});T.rows+=res.n;T.ready+=ready;T.err+=err;T.warn+=warn;T.flag+=flag}
+  const issues=[];for(const sh of SHEETS){const res=V[sh.id];for(const g of res.groups.values())issues.push({sh,g,rows:new Set(g.rows).size})}
+  issues.sort((a,b)=>(a.g.sev===b.g.sev?b.rows-a.rows:a.g.sev==="e"?-1:1));
+  const miss=new Map();for(const {sh,g} of issues){if(!g.fixes.size||!/not found on/.test(g.label))continue;const t=[...g.fixes.values()][0].s;if(BYID[t].list)continue;
+    let m=miss.get(t);if(!m){m={values:new Set(),rows:0,from:new Set()};miss.set(t,m)}for(const k of g.fixes.keys())m.values.add(k);m.rows+=new Set(g.rows).size;m.from.add(sh.name)}
+  const lists=[];for(const L of LISTS){if(L.list==="abbr")continue;const G=listGaps(L.list);if(!LSET[L.list]&&G.distinct)lists.push({L,state:"empty",n:G.distinct});else if(LSET[L.list]&&G.gaps.length)lists.push({L,state:"gaps",n:G.gaps.length})}
+  return {T,sheets,issues,miss:[...miss.entries()].map(([t,m])=>({sh:BYID[t],values:m.values.size,rows:m.rows,from:[...m.from]})).sort((a,b)=>b.rows-a.rows),lists};
+}
+function summaryText(D){const L=[];const pct=D.T.rows-D.T.flag?Math.round(100*D.T.ready/(D.T.rows-D.T.flag)):0;
+  L.push("eAM load data: summary of findings");
+  L.push(`${nfmt(D.T.rows)} rows across ${D.sheets.length} sheets. ${nfmt(D.T.ready)} ready to load (${pct}%), ${nfmt(D.T.err)} with errors, ${nfmt(D.T.warn)} ready but with warnings, ${nfmt(D.T.flag)} marked already in Oracle.`);
+  if(D.miss.length){L.push("");L.push("Missing parent records (load these first):");for(const m of D.miss)L.push(`- ${m.sh.name}: ${nfmt(m.values)} value${m.values===1?"":"s"} missing, referenced by ${nfmt(m.rows)} rows on ${m.from.join(", ")}`)}
+  L.push("");L.push("Top issues:");for(const x of D.issues.slice(0,10))L.push(`- ${x.g.sev==="e"?"Error":"Warning"}, ${x.sh.name}: ${x.g.label} (${nfmt(x.rows)} rows)`);
+  L.push("");L.push("By sheet (load order): rows / ready / errors / warnings / in Oracle");for(const x of D.sheets)L.push(`- ${x.sh.no}. ${x.sh.name}: ${nfmt(x.n)} / ${nfmt(x.ready)} / ${nfmt(x.err)} / ${nfmt(x.warn)} / ${nfmt(x.flag)}`);
+  if(D.lists.length){L.push("");L.push("Reference lists:");for(const l of D.lists)L.push(`- ${l.L.name}: ${l.state==="empty"?"empty, so "+nfmt(l.n)+(l.n===1?" value in the data is":" values in the data are")+" not checked":nfmt(l.n)+(l.n===1?" value":" values")+" in the data not on the list"}`)}
+  return L.join("\n")}
+function renderSummary(){
+  const D=summaryData(),el=$("summary");const pct=D.T.rows-D.T.flag?Math.round(100*D.T.ready/(D.T.rows-D.T.flag)):0;
+  if(!D.T.rows){el.innerHTML=`<p class="muted" style="font-size:14px">No rows yet. Import a workbook or start on 1. Area, and the findings show up here.</p><button class="btn sm" id="sumFresh">Start fresh</button>`;$("sumFresh").onclick=startFresh;return}
+  let h=`<div class="kpis"><div class="kpi"><b>${nfmt(D.T.rows)}</b><span>rows across ${D.sheets.length} sheets</span></div><div class="kpi ok"><b>${pct}%</b><span>${nfmt(D.T.ready)} rows ready to load</span></div><div class="kpi e"><b>${nfmt(D.T.err)}</b><span>rows with errors</span></div><div class="kpi w"><b>${nfmt(D.T.warn)}</b><span>ready, with warnings</span></div><div class="kpi"><b>${nfmt(D.T.flag)}</b><span>marked already in Oracle</span></div></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" id="sumCopy">Copy summary as text</button><button class="btn sm" id="sumAsk">Ask for a written summary</button><button class="btn sm" id="sumLog">Export issue log</button><button class="btn sm" id="sumFresh">Start fresh</button></div>`;
+  if(D.miss.length){h+=`<div class="sumsec">Missing parent records<small>Rows point at records that aren't on the parent sheet or marked as already in Oracle. These block the most rows, so fill them first.</small></div><table class="stab"><colgroup><col style="width:21%"><col style="width:13%"><col style="width:13%"><col></colgroup><tr><th>Parent sheet</th><th class="n">Missing values</th><th class="n">Rows affected</th><th>Referenced from</th></tr>${D.miss.map(m=>`<tr class="go" data-go="${m.sh.id}"><td class="nm" title="${esc(m.sh.name)}">${m.sh.no}. ${esc(m.sh.name)}</td><td class="n">${nfmt(m.values)}</td><td class="n">${nfmt(m.rows)}</td><td class="tw">${esc(m.from.join(", "))}</td></tr>`).join("")}</table>`}
+  h+=`<div class="sumsec">Load readiness by sheet<small>In load order. Ready means no errors; warnings don't block. Select a row to open the sheet.</small></div><table class="stab"><colgroup><col style="width:21%"><col style="width:7%"><col style="width:7%"><col style="width:7%"><col style="width:8.5%"><col style="width:8.5%"><col style="width:9%"><col></colgroup><tr><th>Sheet</th><th class="n">Rows</th><th class="n">Ready</th><th class="n">Errors</th><th class="n">Warnings</th><th class="n">In Oracle</th><th>Status</th><th>Biggest issue</th></tr>`;
+  for(const x of D.sheets){const base=x.n||1;h+=`<tr class="go" data-go="${x.sh.id}"><td class="nm" title="${esc(x.sh.name)}">${x.sh.no}. ${esc(x.sh.name)}</td><td class="n">${nfmt(x.n)}</td><td class="n">${nfmt(x.ready)}</td><td class="n" style="color:var(--err)">${x.err?nfmt(x.err):""}</td><td class="n" style="color:var(--warn)">${x.warn?nfmt(x.warn):""}</td><td class="n">${x.flag?nfmt(x.flag):""}</td><td><div class="bar" title="ready / warnings / errors"><i class="bo" style="width:${100*(x.ready-x.warn)/base}%"></i><i class="bw" style="width:${100*x.warn/base}%"></i><i class="be" style="width:${100*x.err/base}%"></i></div></td><td class="tw">${x.top?`${x.top.sev==="e"?"Error":"Warning"}: ${esc(x.top.label)} (${nfmt(new Set(x.top.rows).size)})`:"None"}</td></tr>`}
+  h+=`</table><div class="sumsec">Top issues across the workbook<small>Errors first, then warnings, by rows affected. Select one to see those rows.</small></div><table class="stab"><colgroup><col style="width:10%"><col style="width:21%"><col><col style="width:9%"></colgroup><tr><th>Severity</th><th>Sheet</th><th>Issue</th><th class="n">Rows</th></tr>`;
+  D.issues.slice(0,15).forEach((x,i)=>{h+=`<tr class="go" data-iss="${i}"><td style="color:var(--${x.g.sev==="e"?"err":"warn"})">${x.g.sev==="e"?"Error":"Warning"}</td><td class="nm" title="${esc(x.sh.name)}">${x.sh.no}. ${esc(x.sh.name)}</td><td class="tw">${esc(x.g.label)}</td><td class="n">${nfmt(x.rows)}</td></tr>`});
+  h+=`</table>`;
+  if(D.lists.length)h+=`<div class="sumsec">Reference lists<small>Empty lists mean those fields aren't being checked yet.</small></div><table class="stab"><colgroup><col style="width:21%"><col></colgroup><tr><th>List</th><th>Status</th></tr>${D.lists.map(l=>`<tr class="go" data-go="${l.L.id}"><td class="nm">${esc(l.L.name)}</td><td class="tw">${l.state==="empty"?`Empty: ${nfmt(l.n)} value${l.n===1?" in the data isn't":"s in the data aren't"} checked`:`${nfmt(l.n)} value${l.n===1?" in the data isn't":"s in the data aren't"} on the list`}</td></tr>`).join("")}</table>`;
+  el.innerHTML=h;
+  el.querySelectorAll("[data-go]").forEach(tr=>tr.onclick=()=>openSheet(tr.dataset.go));
+  el.querySelectorAll("[data-iss]").forEach(tr=>tr.onclick=()=>{const x=D.issues[+tr.dataset.iss];showRows(x.sh.id,x.g.rows,x.g.label)});
+  $("sumCopy").onclick=()=>copyPlain(summaryText(D));
+  $("sumLog").onclick=()=>doExport("iss",false);$("sumFresh").onclick=startFresh;
+  $("sumAsk").onclick=()=>{if(!$("wrap").classList.contains("chatting"))openChat();sendChat("Write a short findings summary for a manager: what's ready, what's blocking the load, and the top three fixes in order. Use these numbers and check any sheet you need.\n\n"+summaryText(D))};
+}
+function copyPlain(t){const done=()=>toast("Summary copied");
+  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(done,fallback);else fallback();
+  function fallback(){kb.value=t;kb.select();try{document.execCommand("copy");done()}catch(e){toast("Couldn't copy. Select the text in the issue log instead.")}kb.value=""}}
+/* reference lists: overview, gaps, review */
+function listGaps(key){
+  const gaps=new Map();const distinct=new Set();
+  for(const u of LK_USES[key]){const sh=BYID[u.sid];const ci=sh.ix[u.field];const oi=!sh.list&&sh.ix.Organization!=null?sh.ix.Organization:null;
+    S.data[u.sid].forEach((row,r)=>{if(isBlank(row)||isFlag(sh,row))return;const v=row[ci]||"";if(!v)return;
+      const org=u.field==="Organization"||oi==null?"":row[oi]||"";distinct.add(v);
+      const bad=LSET[key]?lkCheck(key,v,key==="orgs"?"":org):{label:"unchecked"};if(!bad)return;
+      const gk=(key==="orgs"?"":org)+SEP+v;let g=gaps.get(gk);if(!g){g={org:key==="orgs"?"":org,v,why:bad.label,uses:new Map()};gaps.set(gk,g)}
+      const uk=u.sid+"|"+u.field;let a=g.uses.get(uk);if(!a){a=[];g.uses.set(uk,a)}a.push(r)})}
+  return {distinct:distinct.size,gaps:[...gaps.values()].sort((a,b)=>a.v.localeCompare(b.v))};
+}
+function renderRefOverview(){
+  let h="",lg="";
+  for(const L of LISTS){if(L.lg!==lg){h+=`<div class="lsec">${esc(L.lg)}${lg?"":`<small>Codes that already exist in Oracle. Select a field under "Used by" to jump to it.</small>`}</div>`;lg=L.lg}const key=L.list,LS=LSET[key],G=listGaps(key);const orgs=LS?new Set([].concat(...[...LS.by.values()].map(a=>a.map(x=>x.org).filter(Boolean)))):new Set();
+    const uses=LK_USES[key].filter(u=>!BYID[u.sid].list||key!=="orgs");
+    const shown=key==="orgs"?uses.filter(u=>!BYID[u.sid].list):uses;
+    const chips=key==="abbr"?`<span class="chip" style="cursor:default">Applied to text fields when cleaning</span>`:(key==="orgs"?`<span class="chip" style="cursor:default">Organization field on ${shown.length} sheets</span>`:shown.map(u=>`<button class="chip" data-col="${u.sid}|${esc(u.field)}">${esc(BYID[u.sid].name)}: ${esc(u.field)}</button>`).join(""));
+    let st,acts=`<button class="btn sm" data-go="${L.id}">Open list</button>`;
+    if(key==="abbr"){st=`<div class="st ${LS?"ok":"off"}">${LS?nfmt(LS.n)+" abbreviation"+(LS.n===1?"":"s")+" applied when cleaning":"Empty. Add standard abbreviations such as INSP or PM."}</div>`}
+    else if(!LS){st=G.distinct?`<div class="st off">Empty, so these fields aren't checked. ${nfmt(G.distinct)} distinct value${G.distinct===1?"":"s"} in your data.</div>`:`<div class="st off">Empty, and no values in your data yet.</div>`;
+      if(G.distinct)acts+=`<button class="btn sm" data-review="${key}">Start from data (${nfmt(G.distinct)})</button>`}
+    else if(G.gaps.length){st=`<div class="st bad">${nfmt(G.gaps.length)} value${G.gaps.length===1?"":"s"} in your data ${G.gaps.length===1?"isn't":"aren't"} valid here</div>`;acts+=`<button class="btn sm" data-review="${key}">Review ${nfmt(G.gaps.length)}</button>`}
+    else st=`<div class="st ok">All ${nfmt(G.distinct)} value${G.distinct===1?"":"s"} in your data ${G.distinct===1?"is":"are"} valid</div>`;
+    h+=`<div class="lst"><div class="lh"><strong>${esc(L.name)}</strong><span>${LS?nfmt(LS.n)+" value"+(LS.n===1?"":"s")+(orgs.size?", "+orgs.size+" org"+(orgs.size===1?"":"s"):", all orgs"):"not checked"}</span></div><div class="used">${chips}</div>${st}<div class="acts">${acts}</div></div>`}
+  const fl=SHEETS.filter(sh=>V[sh.id].nx);
+  h+=`<div class="lsec">Already in Oracle<small>Set the last column, "${FLAG}", to Y on any sheet for records that exist in Oracle. They count as valid parents for linked fields, skip load checks except their keys, and stay out of the loader export.</small></div>`;
+  h+=`<div class="lst" style="grid-column:1/-1">${fl.length?`<div class="used">${fl.map(sh=>`<button class="chip" data-flag="${sh.id}">${esc(sh.name)}: ${nfmt(V[sh.id].nx)}</button>`).join("")}</div>`:`<div class="st off">No rows marked yet. Typical use: asset groups, categories, assets or activities that are live in Oracle and referenced by the rows you're loading.</div>`}</div>`;
+  const el=$("lists");el.innerHTML=h;
+  el.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>openSheet(b.dataset.go));
+  el.querySelectorAll("[data-col]").forEach(b=>b.onclick=()=>{const [sid,fld]=b.dataset.col.split("|");openSheet(sid);const c=BYID[sid].ix[fld];sel={r:0,c,ar:0,ac:c};ensureVisible();paint()});
+  el.querySelectorAll("[data-review]").forEach(b=>b.onclick=()=>reviewGaps(b.dataset.review));
+  el.querySelectorAll("[data-flag]").forEach(b=>b.onclick=()=>{const sid=b.dataset.flag;const rows=[];S.data[sid].forEach((row,i)=>{if(!isBlank(row)&&isFlag(BYID[sid],row))rows.push(i)});showRows(sid,rows,`Rows marked ${FLAG}`)});
+}
+function showRows(sid,rows,title){openSheet(sid);focusRows=new Set(rows);sel={r:0,c:0,ar:0,ac:0};grid.scrollTop=0;refresh();
+  const el=$("result");el.className="result show mid";el.innerHTML=`<strong>${esc(title)}: ${nfmt(focusRows.size)} row${focusRows.size===1?"":"s"}</strong><button class="btn sm" id="rAll">Show all rows</button>`;$("rAll").onclick=()=>{focusRows=null;hideResult();refresh()}}
+function reviewGaps(key){
+  const L=BYID["L_"+key],G=listGaps(key).gaps,LS=LSET[key];const scoped=LS&&LS.scoped;
+  const rows=G.slice(0,1000).map((g,i)=>`<tr><td><input type="checkbox" data-i="${i}" checked aria-label="Add ${esc(g.v)}"></td><td>${esc(g.v)}</td><td>${esc(g.org||"")}</td><td class="muted">${g.why==="unchecked"?"":esc(g.why)}</td><td>${[...g.uses.entries()].map(([uk,a])=>{const [sid,fld]=uk.split("|");return `<button class="chip" data-show="${i}|${esc(uk)}">${esc(BYID[sid].name)}: ${esc(fld)} (${nfmt(a.length)})</button>`}).join(" ")}</td></tr>`).join("");
+  modal(`<h2>${LS?"Values not valid on":"Start"} the ${esc(L.name)} list</h2><p>${LS?"These values are used in your data but aren't valid on the list. Add the ones that really exist in Oracle; fix the rest in the data. Select a field to see its rows.":"Every distinct value your data uses. Add the ones that exist in Oracle, then untick anything that looks wrong so it gets flagged."}</p>
+  <div class="rv"><table><tr><th><input type="checkbox" id="rvAll" checked aria-label="Select all"></th><th>Value</th><th>Org</th><th>Why</th><th>Used in</th></tr>${rows}</table></div>${G.length>1000?`<p>Showing the first 1,000 of ${nfmt(G.length)}.</p>`:""}
+  ${key==="orgs"?"":`<label class="opt"><input type="radio" name="rvScope" value="org"${scoped?" checked":""}><span>Valid only in the org where each value is used</span></label><label class="opt"><input type="radio" name="rvScope" value="all"${scoped?"":" checked"}><span>Valid in every org (Organization left blank)</span></label>`}
+  <div class="row"><button class="btn" data-close>Close</button><button class="btn pri" id="rvAdd">Add selected to ${esc(L.name)}</button></div>`);
+  const m=$("modal");
+  $("rvAll").onchange=e=>m.querySelectorAll("[data-i]").forEach(c=>c.checked=e.target.checked);
+  m.querySelectorAll("[data-show]").forEach(b=>b.onclick=()=>{const [i,uk]=[b.dataset.show.slice(0,b.dataset.show.indexOf("|")),b.dataset.show.slice(b.dataset.show.indexOf("|")+1)];const g=G[+i];const [sid,fld]=uk.split("|");closeModal();showRows(sid,g.uses.get(uk),`${fld} = ${g.v}`);const c=BYID[sid].ix[fld];sel={r:0,c,ar:0,ac:c};ensureVisible();paint()});
+  $("rvAdd").onclick=()=>{const byOrg=(m.querySelector('input[name="rvScope"]:checked')||{}).value==="org";const pick=[...m.querySelectorAll("[data-i]:checked")].map(c=>G[+c.dataset.i]);
+    if(!pick.length){closeModal();return}
+    snapshot([L.id],"Add values to "+L.name);const have=new Set(S.data[L.id].filter(r=>!isBlank(r)).map(r=>(L.ix.Organization!=null?r[L.ix.Organization]||"":"")+SEP+r[L.ix.Code]));let n=0;
+    for(const g of pick){const org=key==="orgs"||!byOrg?"":g.org;const kk=org+SEP+g.v;if(have.has(kk))continue;have.add(kk);const row=new Array(L.fields.length).fill("");row[L.ix.Code]=g.v;if(org)row[L.ix.Organization]=org;S.data[L.id].push(row);n++}
+    closeModal();changed();toast(`Added ${nfmt(n)} value${n===1?"":"s"} to ${L.name}. Add descriptions on the list when you have them.`,()=>openSheet(L.id),"Open list")};
+}
+$("status").addEventListener("click",e=>{const b=e.target.closest("[data-openlist]");if(b){openSheet("L_"+b.dataset.openlist);return}
+  const l=e.target.closest("[data-lk]");if(!l)return;const L=$("status")._links[+l.dataset.lk],from=$("status")._from;
+  const fld=cur().fields[sel.c]?cur().fields[sel.c].n:null;
+  if(L.rows.length===1)gotoRow(L.s,L.rows[0],fld);
+  else{const rows=L.s===from.s?L.rows.concat([from.d]):L.rows;showRows(L.s,rows,L.s===from.s?"Duplicate rows":`Matching rows on ${BYID[L.s].name}`);
+    const c=BYID[L.s].ix[fld];if(c!=null){sel={r:0,c,ar:0,ac:c};ensureVisible();paint()}}});
+function gotoRow(sid,d,fld){if(S.active!==sid)openSheet(sid);else{focusRows=null;S.view="all";$("fView").value="all";hideResult();computeView()}
+  const c=BYID[sid].ix[fld]??0;sel={r:d,c,ar:d,ac:c};ensureVisible();paint();kb.focus()}
+
+function openSheet(id){
+  if(editing)commitEdit();
+  S.active=id;focusRows=null;hideResult();S.view="all";$("fView").value="all";
+  const isS=id==="_summary",isL=id==="_lists"||isS;
+  $("gridwrap").style.display=isL?"none":"flex";$("tools").style.display=isL?"none":"flex";$("status").style.display=isL?"none":"flex";$("lists").style.display=id==="_lists"?"grid":"none";$("summary").style.display=isS?"block":"none";
+  if(isS){$("sTitle").textContent="Summary of findings";$("sNav").textContent="Where the data stands, what's blocking the load, and what to fix first";renderSummary();renderRail();renderIssues();save();return}
+  if(isL){$("sTitle").textContent="Reference lists";$("sNav").textContent="How each list connects to the sheets, and what in your data isn't on it yet";renderRefOverview();renderRail();renderIssues();save();return}
+  const sh=cur();$("sTitle").textContent=sh.list?sh.name+" list":sh.no+". "+sh.name;$("sNav").textContent=sh.nav||"";
+  sel={r:0,c:0,ar:0,ac:0};layout();renderHead();grid.scrollTop=0;grid.scrollLeft=0;refresh();save();
+}
+function refresh(){if(S.active==="_summary"){renderSummary();renderRail();renderIssues();return}if(S.active==="_lists"){renderRefOverview();renderRail();renderIssues();return}computeView();renderRows();renderStatus();renderRail();renderIssues()}
+function changed(){validateAll();refresh();scheduleSave()}
+
+/* toolbar */
+$("bUndo").onclick=undo;
+$("fView").onchange=e=>{S.view=e.target.value;focusRows=null;hideResult();sel={r:0,c:0,ar:0,ac:0};grid.scrollTop=0;refresh()};
+$("autoclean").onchange=e=>{S.cleanOnEntry=e.target.checked;scheduleSave()};
+$("bDel").onclick=()=>{const r0=Math.min(sel.r,sel.ar),r1=Math.max(sel.r,sel.ar);const del=new Set();for(let vr=r0;vr<=r1;vr++){const d=dr(vr);if(d!=null&&d<dataRowCount())del.add(d)}
+  if(!del.size)return;snapshot([S.active],"Delete rows");S.data[S.active]=S.data[S.active].filter((_,i)=>!del.has(i));
+  if(focusRows){focusRows=null;hideResult()}
+  sel.ar=sel.r=Math.min(r0,Math.max(0,viewCount()-1));changed();toast(`Deleted ${nfmt(del.size)} row${del.size===1?"":"s"}`)};
+$("bClean").onclick=()=>cleanSheet(S.active,true);
+$("bIss").onclick=()=>$("wrap").classList.toggle("showiss");
+
+
+$("bRules").onclick=()=>{const T=S.textRules;const na=(S.data.L_abbr||[]).filter(r=>!isBlank(r)).length;
+  modal(`<h2>Text rules</h2><p>How text is cleaned and checked. Cleaning happens as rows are typed, pasted or imported when Clean on entry is on, and when you select Clean this sheet.</p>
+  <label class="opt"><input type="radio" name="cc" value="as_typed"${T.codeCase==="as_typed"?" checked":""}><span>Keep codes as typed<small>Codes on a reference list or a parent sheet are still matched to their exact case, so insp becomes INSP when INSP exists there.</small></span></label>
+  <label class="opt"><input type="radio" name="cc" value="upper"${T.codeCase==="upper"?" checked":""}><span>Make codes UPPERCASE<small>Applies to code fields such as asset group, activity name, area and serial number. Descriptions are left alone.</small></span></label>
+  <label class="opt"><input type="checkbox" id="trRep"${T.flagRepeat?" checked":""}><span>Flag repeated words in descriptions<small>For example "the the". Numbers such as 1 1/2 are ignored.</small></span></label>
+  <label class="opt"><input type="checkbox" id="trCaps"${T.flagAllCaps?" checked":""}><span>Flag descriptions written in all capitals</small></span></label>
+  <p>Abbreviations list: ${na?nfmt(na)+" entries":"empty"}. Matching words in text fields are set to the list's case, for example insp to INSP. <button class="btn sm" id="trAbbr">Open list</button></p>
+  <div class="row"><button class="btn" data-close>Cancel</button><button class="btn" id="trAll">Save and clean all sheets</button><button class="btn pri" id="trSave">Save</button></div>`);
+  const saveRules=()=>{S.textRules={codeCase:document.querySelector('input[name="cc"]:checked').value,flagRepeat:$("trRep").checked,flagAllCaps:$("trCaps").checked};scheduleSave()};
+  $("trAbbr").onclick=()=>{closeModal();openSheet("L_abbr")};
+  $("trSave").onclick=()=>{saveRules();closeModal();changed();toast("Text rules saved")};
+  $("trAll").onclick=()=>{saveRules();closeModal();snapshot(SHEETS.map(x=>x.id),"Clean all sheets");let n=0;
+    for(const sh of SHEETS)for(const row of S.data[sh.id])sh.fields.forEach((fl,c)=>{const b=row[c]||"";const a=cleanVal(fl,b);if(a!==b){row[c]=a;n++}});
+    changed();toast(`Text rules saved. ${nfmt(n)} cells updated across all sheets. Undo reverses it.`)};
+};
+
+/* ============ Clear and start fresh ============ */
+$("bClearSheet").onclick=()=>{const sh=cur();if(!sh)return;const n=V[sh.id].n;if(!n){toast(sh.name+" is already empty");return}
+  modal(`<h2>Clear ${esc(sh.name)}${sh.list?" list":""}?</h2><p>Removes all ${nfmt(n)} row${n===1?"":"s"} on this sheet. Other sheets aren't touched. Undo brings them back until you close or reload the page.</p><div class="row"><button class="btn" data-close>Cancel</button><button class="btn pri" id="doClr">Clear ${nfmt(n)} row${n===1?"":"s"}</button></div>`);
+  $("doClr").onclick=()=>{snapshot([sh.id],"Clear "+sh.name);S.data[sh.id]=[];closeModal();focusRows=null;hideResult();sel={r:0,c:0,ar:0,ac:0};changed();toast(`Cleared ${sh.name}. Undo brings it back.`,undo,"Undo")}};
+function startFresh(){const rows=SHEETS.reduce((a,x)=>a+V[x.id].n,0),lv=LISTS.reduce((a,x)=>a+V[x.id].n,0);
+  modal(`<h2>Start fresh</h2><p>Clears the tool so you can begin a new collection or reload a workbook cleanly. Export a working workbook first if you want to keep what's here.</p>
+  <label class="opt"><input type="checkbox" id="sfData" checked><span>Clear all sheets<small>${nfmt(rows)} rows across ${SHEETS.filter(x=>V[x.id].n).length} sheets</small></span></label>
+  <label class="opt"><input type="checkbox" id="sfLists"><span>Clear reference lists<small>${nfmt(lv)} values, including abbreviations. Leave unchecked to keep your lists for the next collection.</small></span></label>
+  <label class="opt"><input type="checkbox" id="sfRules"><span>Reset text rules to the defaults<small>Codes as typed, repeated-word check on, all-capitals check off</small></span></label>
+  <div class="row"><button class="btn" id="sfExport">Export working workbook first</button><button class="btn" data-close>Cancel</button><button class="btn pri" id="sfGo">Clear</button></div>`);
+  $("sfExport").onclick=()=>{closeModal();doExport("work",false)};
+  $("sfGo").onclick=()=>{const ids=[].concat($("sfData").checked?SHEETS.map(x=>x.id):[],$("sfLists").checked?LISTS.map(x=>x.id):[]);const rr=$("sfRules").checked;
+    if(!ids.length&&!rr){closeModal();return}
+    if(ids.length)snapshot(ids,"Start fresh");ids.forEach(id=>S.data[id]=[]);if(rr)S.textRules={codeCase:"as_typed",flagRepeat:true,flagAllCaps:false};
+    closeModal();focusRows=null;hideResult();changed();toast(`Cleared ${ids.length?nfmt(ids.length)+" sheets and lists":"text rules"}. Undo brings the rows back until you reload.`,ids.length?undo:null,"Undo")}}
+function cleanSheet(id,report){
+  const sh=BYID[id];snapshot([id],"Clean "+sh.name);
+  const rows=S.data[id];let cells=0,defs=0;
+  for(const row of rows){sh.fields.forEach((fl,c)=>{const before=row[c]||"";const after=cleanVal(fl,before);if(after!==before){row[c]=after;cells++}})}
+  for(const row of rows){if(isBlank(row))continue;sh.fields.forEach((fl,c)=>{if(!row[c]&&fl.def){const v=fl.def.startsWith("=")?row[sh.ix[fl.def.slice(1)]]||"":fl.def;if(v){row[c]=v;defs++}}})}
+  const seen=new Set();const out=[];let dups=0,blanks=0;
+  for(const row of rows){if(isBlank(row)){blanks++;continue}const key=row.join(SEP);if(seen.has(key)){dups++;continue}seen.add(key);out.push(row)}
+  S.data[id]=out;changed();
+  if(report)modal(`<h2>Cleaned ${esc(sh.name)}</h2><table><tr><td>Cells standardized (spaces, dates, numbers, Y/N, list values)</td><td class="n">${nfmt(cells)}</td></tr><tr><td>Blank fields filled from template defaults</td><td class="n">${nfmt(defs)}</td></tr><tr><td>Exact duplicate rows removed</td><td class="n">${nfmt(dups)}</td></tr><tr><td>Empty rows removed</td><td class="n">${nfmt(blanks)}</td></tr></table><p>Rows that share a key but differ in other fields are left in place and flagged, since picking the right one needs a person. Undo reverses this clean in one step.</p><div class="row"><button class="btn pri" data-close>Done</button></div>`);
+  return {cells,defs,dups,blanks};
+}
+
+/* ============ import ============ */
+$("bImport").onclick=()=>$("file").click();
+$("file").onchange=async e=>{const file=e.target.files[0];e.target.value="";if(!file)return;
+  try{
+    let sheets;
+    if(/\.(csv|txt|tsv)$/i.test(file.name)){const t=await file.text();const delim=/\.tsv$/i.test(file.name)||(t.split("\n")[0].split("\t").length>t.split("\n")[0].split(",").length)?"\t":",";sheets=[{name:file.name,aoa:parseDelimited(t,delim)}]}
+    else{if(!window.XLSX)throw new Error("The spreadsheet reader didn't load. Check your connection and try again.");
+      const wb=XLSX.read(await file.arrayBuffer(),{cellNF:true,cellDates:false});sheets=wb.SheetNames.map(n=>({name:n,aoa:readWS(wb.Sheets[n])}))}
+    planImport(file.name,sheets);
+  }catch(err){modal(`<h2>Couldn't read that file</h2><p>${esc(err.message||err)}</p><div class="row"><button class="btn pri" data-close>Close</button></div>`)}
+};
+function readWS(ws){if(!ws["!ref"])return [];const R=XLSX.utils.decode_range(ws["!ref"]);const out=[];
+  for(let r=R.s.r;r<=R.e.r;r++){const row=[];for(let c=R.s.c;c<=R.e.c;c++){const cell=ws[XLSX.utils.encode_cell({r,c})];row.push(cellText(cell))}out.push(row)}return out}
+function cellText(cell){if(!cell||cell.v==null)return "";
+  if(cell.t==="n"){if(cell.z&&cell.z!=="General"&&XLSX.SSF.is_date(cell.z)){const p=serialToDate(cell.v);if(p)return p.t?p.d+" "+p.t:p.d}
+    if(cell.w&&/^0\d+$/.test(cell.w))return cell.w;return String(Number(cell.v.toPrecision(15)))}
+  if(cell.t==="d"){const d=cell.v;return mdY(d.getFullYear(),d.getMonth()+1,d.getDate())}
+  if(cell.t==="b")return cell.v?"TRUE":"FALSE";if(cell.t==="e")return "";return String(cell.v)}
+const META=new Set(["field","oracledatatype","formatlength","oraclerequiredfieldyn","fieldvalidation","comments","javaformsnavigation"]);
+const MAPROW=/\b[a-z_]+\.[a-z_]+\b|siteid|default to|leave blank|^"[^"]*"$|to_char\(/i;
+function extractTable(aoa,sh){
+  // template layout: labels in column A, 'Field' row holds headers
+  let hdrRow=-1,start=0;
+  for(let i=0;i<Math.min(aoa.length,20);i++){const a=norm(aoa[i][0]);if(a==="field"&&hdrRow<0)hdrRow=i;if(META.has(a)||a==="field")start=i+1}
+  let map,off=0,skipped=0;
+  if(hdrRow>=0){map=aoa[hdrRow].map(h=>sh.fields.findIndex(fl=>norm(fl.n)===norm(h)&&norm(h)!==""));}
+  else{for(let i=0;i<Math.min(aoa.length,10);i++){const m=headerMap(aoa[i],sh);if(m){map=m;start=i+1;break}}}
+  if(!map){map=sh.fields.map((_,i)=>i);start=0;off=1}
+  const unmapped=hdrRow>=0?aoa[hdrRow].filter((h,i)=>h&&map[i]<0&&!META.has(norm(h))):[];
+  const out=[];let lead=true;
+  for(let i=start;i<aoa.length;i++){const r=aoa[i];if(!r)continue;
+    if(norm(r[0])==="field"){continue}
+    const vals=[];let any=false;map.forEach((j,ci)=>{if(j>=0&&r[ci]!==""&&r[ci]!=null){any=true}});
+    if(!any)continue;
+    const filled=map.reduce((a,j,ci)=>a+(j>=0&&String(r[ci]??"").trim()?1:0),0);
+    const noteLike=filled===1&&map.some((j,ci)=>j>=0&&String(r[ci]??"").length>40);
+    if(lead&&(noteLike||r.some(v=>typeof v==="string"&&MAPROW.test(v))||(hdrRow>=0&&String(r[0]||"").trim()&&!map.includes(0)))){skipped++;continue}
+    lead=false;
+    const row=new Array(sh.fields.length).fill("");map.forEach((j,ci)=>{if(j>=0)row[j]=r[ci]==null?"":r[ci]});out.push(row)}
+  const mapped=map.filter(j=>j>=0).length;
+  return {rows:out,mapped,unmapped,skipped,positional:!!off};
+}
+let pending=null;
+let pendingSettings=null,rawImport=false;
+function readSettings(sheets){const t=sheets.find(x=>norm(x.name)==="toolsettings");if(!t)return null;const m={};for(const r of t.aoa.slice(1))if(r[0])m[norm(r[0])]=String(r[1]||"").trim();
+  if(!Object.keys(m).length)return null;return {codeCase:/upper/i.test(m.codecase||"")?"upper":"as_typed",flagRepeat:(m.flagrepeatedwords||"Y")==="Y",flagAllCaps:m.flagallcapitaldescriptions==="Y",clean:(m.cleanonentry||"Y")==="Y"}}
+function planImport(fname,sheets){
+  const plan=[];pendingSettings=readSettings(sheets);
+  for(const s of sheets){const nm=norm(s.name);const sh=SHEETS.find(x=>norm(x.name)===nm)||LISTS.find(x=>nm==="ref"+norm(x.name)||nm===norm(x.name)+"list");
+    if(sh){const t=extractTable(s.aoa,sh);if(t.rows.length)plan.push({sh,t,src:s.name})}}
+  let mode="workbook";
+  if(!plan.length){mode="single";const s=sheets.find(x=>x.aoa.length)||sheets[0];const sh=cur();if(!sh||!BYID[S.active]){modal(`<h2>Pick a sheet first</h2><p>No sheet in ${esc(fname)} matches a template sheet name, so it can only be loaded into the sheet you have open. Open a sheet and import again.</p><div class="row"><button class="btn pri" data-close>Close</button></div>`);return}
+    const t=extractTable(s.aoa,sh);plan.push({sh,t,src:s.name})}
+  pending=plan;
+  const rowsH=plan.map(p=>`<tr><td>${p.sh.list?"List: ":""}${esc(p.sh.name)}<br><span class="muted">from "${esc(p.src)}"</span></td><td class="n">${nfmt(p.t.rows.length)}</td><td class="n">${p.t.mapped} of ${p.sh.fields.length}</td><td>${p.t.positional?'<span style="color:var(--warn)">No header row found, columns taken in order</span>':p.t.unmapped.length?"Ignored: "+esc(p.t.unmapped.join(", ")):""}${p.t.skipped?(p.t.unmapped.length?"<br>":"")+`Skipped ${p.t.skipped} mapping/notes row${p.t.skipped>1?"s":""}`:""}</td></tr>`).join("");
+  const existing=plan.some(p=>V[p.sh.id].n);
+  modal(`<h2>Import ${esc(fname)}</h2><p>${mode==="workbook"?"Matched these template sheets by name.":"No template sheet names found, so this goes into the open sheet."} Every row is cleaned (if Clean on entry is on) and checked as it lands.</p>
+  <table><tr><th>Into</th><th>Rows</th><th>Columns</th><th>Notes</th></tr>${rowsH}</table>${pendingSettings?`<p>This is a working workbook from the tool, so rows load exactly as exported, without re-cleaning.</p>`:""}
+  ${existing?(()=>{const def=pendingSettings?"fresh":"append";const r=(v,t,d)=>`<label class="opt"><input type="radio" name="im" value="${v}"${def===v?" checked":""}><span>${t}<small>${d}</small></span></label>`;
+    return r("append","Add to existing rows","Keeps what's already here. Rows that repeat a key are flagged as duplicates.")+r("replace","Replace only the sheets in this file","Clears the sheets and lists listed above, then imports. Everything else stays.")+r("fresh","Start fresh with this file","Clears every sheet and list first, so the tool matches the file exactly. Best when reloading a working workbook.")})():""}
+  ${pendingSettings?`<label class="opt"><input type="checkbox" id="imSet" checked><span>Use this workbook's text rules<small>Code case: ${pendingSettings.codeCase==="upper"?"UPPERCASE":"as typed"}; repeated words ${pendingSettings.flagRepeat?"on":"off"}; all-capitals ${pendingSettings.flagAllCaps?"on":"off"}; clean on entry ${pendingSettings.clean?"on":"off"}. Applied before rows are cleaned, so everyone checks the same way.</small></span></label>`:""}
+  <div class="row"><button class="btn" data-close>Cancel</button><button class="btn pri" id="doImp">Import ${nfmt(plan.reduce((a,p)=>a+p.t.rows.length,0))} rows</button></div>`);
+  $("doImp").onclick=()=>{const m=(document.querySelector('input[name="im"]:checked')||{}).value||"append";
+    rawImport=!!pendingSettings;
+    if(pendingSettings&&$("imSet")&&$("imSet").checked){S.textRules={codeCase:pendingSettings.codeCase,flagRepeat:pendingSettings.flagRepeat,flagAllCaps:pendingSettings.flagAllCaps};S.cleanOnEntry=pendingSettings.clean;$("autoclean").checked=S.cleanOnEntry}
+    closeModal();runImport(m)};
+}
+function runImport(mode){
+  const plan=pending;pending=null;
+  if(mode==="fresh"){snapshot(ALL.map(x=>x.id),"Import (start fresh)");ALL.forEach(x=>S.data[x.id]=[])}else snapshot(plan.map(p=>p.sh.id),"Import");
+  const touchedBy={};const cleared=new Set();
+  for(const p of plan){const id=p.sh.id;if(mode==="replace"&&!cleared.has(id)){S.data[id]=[];cleared.add(id)}else trimTail(id);
+    const start=S.data[id].length;const set=new Set();
+    p.t.rows.forEach((row,i)=>{const clean=row.map((v,c)=>S.cleanOnEntry&&!rawImport?cleanVal(p.sh.fields[c],v):String(v==null?"":v));S.data[id].push(clean);set.add(start+i)});
+    touchedBy[id]=set}
+  validateAll();
+  const lines=plan.map(p=>{const res=V[p.sh.id];let e=0,w=0,ok=0;for(const d of touchedBy[p.sh.id]){const ri=res.rows.get(d);if(!ri)ok++;else if(ri.sev==="e")e++;else w++}
+    return `<tr data-go="${p.sh.id}" style="cursor:pointer"><td>${p.sh.no?p.sh.no+". ":"List: "}${esc(p.sh.name)}</td><td class="n">${nfmt(touchedBy[p.sh.id].size)}</td><td class="n" style="color:var(--ok)">${nfmt(ok)}</td><td class="n" style="color:var(--err)">${e?nfmt(e):""}</td><td class="n" style="color:var(--warn)">${w?nfmt(w):""}</td></tr>`}).join("");
+  const firstId=plan[0].sh.id;
+  if(S.active!==firstId&&plan.length===1)openSheet(firstId);else refresh();
+  if(plan.length===1){entryResult(`Imported ${nfmt(touchedBy[firstId].size)} rows into ${plan[0].sh.name}`,touchedBy[firstId])}
+  rawImport=false;if(plan.some(p=>p.sh.list))validateAll();
+  modal(`<h2>Import checked</h2><p>Counts are rows imported, then how those rows came out. Select a sheet to open it.</p><table><tr><th>Sheet</th><th>Imported</th><th>Clean</th><th>Errors</th><th>Warnings</th></tr>${lines}</table><div class="row"><button class="btn pri" data-close>Done</button></div>`);
+  $("modal").querySelectorAll("[data-go]").forEach(tr=>tr.onclick=()=>{closeModal();openSheet(tr.dataset.go)});
+  scheduleSave();
+}
+
+/* ============ export ============ */
+let downloads=null;
+if(window.claude&&window.claude.use){window.claude.use("downloads").then(d=>{downloads=d}).catch(()=>{})}
+async function saveFile(name,blob){
+  if(downloads){try{await downloads.save({filename:name,data:blob});toast("Saved "+name)}catch(e){if(e&&e.code==="declined")return;toast("Couldn't save: "+((e&&e.message)||e))}return}
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500);
+}
+const TLABEL={t:"varchar2",e:"varchar2",yn:"varchar2",n:"number",d:"date",dt:"date"};
+function fieldLen(fl){return fl.t==="d"?"mm/dd/yyyy":fl.t==="dt"?"mm/dd/yyyy hh:mm":fl.t==="yn"?1:fl.l||""}
+function fieldRule(fl){if(fl.tool)return "Y/N, tool only";if(fl.t==="yn")return "Y/N";if(fl.t==="e")return fl.en.join(", ");if(fl.ref)return "Must exist on "+(fl.ref.label||BYID[(fl.ref.any||[fl.ref])[0].s].name);if(fl.lk)return "LOV: "+LKLABEL[fl.lk];return ""}
+function outVal(fl,v){if(v&&fl.t==="n"&&isNum(v))return Number(v);return v}
+$("bExport").onclick=()=>{
+  const tot=SHEETS.reduce((a,s)=>a+V[s.id].n-V[s.id].nx,0),terr=SHEETS.reduce((a,s)=>a+V[s.id].er,0),tx=SHEETS.reduce((a,s)=>a+V[s.id].nx,0),tl=LISTS.reduce((a,s)=>a+V[s.id].n,0);
+  modal(`<h2>Export</h2><p>${nfmt(tot)} rows to load, ${nfmt(terr)} rows with errors. ${nfmt(tx)} rows marked already in Oracle and ${nfmt(tl)} reference list values.</p>
+  <label class="opt"><input type="radio" name="ex" value="work" checked><span>Working workbook<small>Everything, in template layout: rows to load, rows marked already in Oracle, and a "Ref - " tab per list. Re-import it and every link comes back.</small></span></label>
+  <label class="opt"><input type="radio" name="ex" value="load"><span>Loader workbook<small>Only rows to load, one header row per sheet. No "${FLAG}" column, no marked rows, no list tabs.</small></span></label>
+  <label class="opt"><input type="radio" name="ex" value="csv"><span>CSV of the open sheet, loader form<small>${!BYID[S.active]?"Open a sheet first.":esc(cur().name)}</small></span></label>
+  <label class="opt"><input type="radio" name="ex" value="iss"><span>Issue log<small>Every error and warning with sheet, row, field and message.</small></span></label>
+  <label class="opt"><input type="checkbox" id="exClean"><span>Leave out rows that still have errors<small>Loader workbook and CSV only. Warnings stay in.</small></span></label>
+  <div class="row"><button class="btn" data-close>Cancel</button><button class="btn pri" id="doExp">Export</button></div>`);
+  $("doExp").onclick=()=>{const m=document.querySelector('input[name="ex"]:checked').value;const x=$("exClean").checked;closeModal();doExport(m,x)};
+};
+function stamp(){const d=new Date();return d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())}
+function outCols(sh,loader){return sh.fields.map((fl,i)=>[fl,i]).filter(([fl])=>!(loader&&fl.tool))}
+function rowsFor(sh,loader,excl){const res=V[sh.id];return S.data[sh.id].map((r,i)=>[r,i]).filter(([r,i])=>!isBlank(r)&&!(loader&&isFlag(sh,r))&&!(loader&&excl&&res.rows.get(i)&&res.rows.get(i).sev==="e"))}
+function doExport(mode,excl){
+  if(!window.XLSX&&mode!=="csv"){toast("The spreadsheet writer didn't load. Check your connection.");return}
+  if(mode==="csv"){if(!BYID[S.active])return;const sh=cur();const cols=outCols(sh,!sh.list);const q=v=>/[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;
+    const lines=[cols.map(([fl])=>q(fl.n)).join(",")].concat(rowsFor(sh,!sh.list,excl).map(([r])=>cols.map(([,i])=>q(r[i]||"")).join(",")));
+    saveFile((sh.list?"List_":"")+sh.name.replace(/\W+/g,"_")+"_"+stamp()+".csv",new Blob(["\ufeff"+lines.join("\r\n")],{type:"text/csv"}));return}
+  const wb=XLSX.utils.book_new();let count=0;
+  if(mode==="iss"){const aoa=[["Load order","Sheet","Row","Field","Severity","Message"]];
+    for(const sh of ALL){const res=V[sh.id];for(const [r,ri] of [...res.rows.entries()].sort((a,b)=>a[0]-b[0])){for(const [c,ce] of ri.cells)for(const m of ce.msgs)aoa.push([sh.no||"List",sh.name,r+1,sh.fields[c].n,m[0]==="e"?"Error":"Warning",m[1]]);for(const m of ri.msgs)aoa.push([sh.no||"List",sh.name,r+1,"",m[0]==="e"?"Error":"Warning",m[1]])}}
+    count=aoa.length-1;const sws=XLSX.utils.aoa_to_sheet(summaryText(summaryData()).split("\n").map(l=>[l]));sws["!cols"]=[{wch:120}];XLSX.utils.book_append_sheet(wb,sws,"Summary");
+    const ws=XLSX.utils.aoa_to_sheet(aoa);ws["!cols"]=[{wch:10},{wch:26},{wch:8},{wch:26},{wch:10},{wch:90}];XLSX.utils.book_append_sheet(wb,ws,"Issues");
+    saveFile("eAM_issue_log_"+stamp()+".xlsx",new Blob([XLSX.write(wb,{bookType:"xlsx",type:"array"})],{type:"application/octet-stream"}));return}
+  const loader=mode==="load";
+  for(const sh of SHEETS){const rows=rowsFor(sh,loader,excl);if(!rows.length)continue;const cols=outCols(sh,loader);let aoa;
+    if(!loader){aoa=[["Field",...cols.map(([f])=>f.n)],["Oracle Data Type",...cols.map(([f])=>f.tool?"tool only":TLABEL[f.t])],["Format/Length",...cols.map(([f])=>fieldLen(f))],["Oracle required field (Y/N)",...cols.map(([f])=>f.r?"Y":"N")],["Field Validation",...cols.map(([f])=>fieldRule(f))],["Comments",...cols.map(([f])=>f.tool?"Y = record already exists in Oracle. Not loaded; used as a valid parent.":"")]];
+      rows.forEach(([r])=>aoa.push(["",...cols.map(([f,i])=>outVal(f,r[i]||""))]))}
+    else{aoa=[cols.map(([f])=>f.n)];rows.forEach(([r])=>aoa.push(cols.map(([f,i])=>outVal(f,r[i]||""))))}
+    count+=rows.length;const ws=XLSX.utils.aoa_to_sheet(aoa);ws["!cols"]=(loader?[]:[{wch:26}]).concat(cols.map(([fl])=>({wch:Math.min(Math.max(fl.n.length+2,fl.t==="d"?12:10),40)})));
+    XLSX.utils.book_append_sheet(wb,ws,sh.name.slice(0,31))}
+  if(!loader)for(const L of LISTS){const rows=rowsFor(L,false,false);if(!rows.length)continue;const aoa=[L.fields.map(f=>f.n)].concat(rows.map(([r])=>r.map(v=>v||"")));
+    count+=rows.length;const ws=XLSX.utils.aoa_to_sheet(aoa);ws["!cols"]=L.fields.map(f=>({wch:Math.max(12,Math.min(f.l||12,40))}));XLSX.utils.book_append_sheet(wb,ws,("Ref - "+L.name).slice(0,31))}
+  if(!loader&&count){const T=S.textRules;const ws=XLSX.utils.aoa_to_sheet([["Setting","Value"],["Code case",T.codeCase==="upper"?"UPPERCASE":"As typed"],["Flag repeated words",T.flagRepeat?"Y":"N"],["Flag all-capital descriptions",T.flagAllCaps?"Y":"N"],["Clean on entry",S.cleanOnEntry?"Y":"N"]]);ws["!cols"]=[{wch:32},{wch:14}];XLSX.utils.book_append_sheet(wb,ws,"Tool settings")}
+  if(!count){toast("Nothing to export yet");return}
+  saveFile("eAM_"+(loader?"loader_":"working_")+stamp()+".xlsx",new Blob([XLSX.write(wb,{bookType:"xlsx",type:"array"})],{type:"application/octet-stream"}));
+}
+
+/* ============ modal / toast ============ */
+function modal(html){$("modal").innerHTML=html;$("scrim").classList.add("show");$("modal").querySelectorAll("[data-close]").forEach(b=>b.onclick=closeModal);const b=$("modal").querySelector(".btn.pri");if(b)b.focus()}
+function closeModal(){$("scrim").classList.remove("show");kb.focus()}
+$("scrim").addEventListener("mousedown",e=>{if(e.target.id==="scrim")closeModal()});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&$("scrim").classList.contains("show"))closeModal()});
+let tt=0;function toast(msg,act,actLabel){const t=$("toast");t.innerHTML=esc(msg)+(act?` <button class="btn sm" style="margin-left:8px">${esc(actLabel)}</button>`:"");t.classList.add("show");if(act)t.querySelector("button").onclick=()=>{t.classList.remove("show");act()};clearTimeout(tt);tt=setTimeout(()=>t.classList.remove("show"),act?7000:3200)}
+
+/* ============ autosave (this browser only) ============ */
+let db=null,st=0;
+function idb(){return new Promise(res=>{try{const r=indexedDB.open("eam-load-builder",1);r.onupgradeneeded=()=>r.result.createObjectStore("s");r.onsuccess=()=>res(r.result);r.onerror=()=>res(null)}catch(e){res(null)}})}
+function scheduleSave(){clearTimeout(st);st=setTimeout(save,900)}
+async function save(){try{if(!db)db=await idb();if(!db){$("saved").textContent="Autosave unavailable here. Export to keep your work.";return}
+  const tx=db.transaction("s","readwrite");tx.objectStore("s").put({data:S.data,active:S.active,clean:S.cleanOnEntry,textRules:S.textRules,v:2},"draft");
+  tx.oncomplete=()=>{const d=new Date();$("saved").textContent="Saved in this browser "+pad(d.getHours())+":"+pad(d.getMinutes())};
+  tx.onerror=()=>{$("saved").textContent="Autosave failed. Export to keep your work."}}catch(e){$("saved").textContent="Autosave unavailable here. Export to keep your work."}}
+async function load(){try{db=await idb();if(!db)return;await new Promise(res=>{const tx=db.transaction("s","readonly");const r=tx.objectStore("s").get("draft");
+  r.onsuccess=()=>{const v=r.result;if(v&&v.data){for(const s of ALL){const rows=v.data[s.id];if(Array.isArray(rows))S.data[s.id]=rows.map(row=>{const a=new Array(s.fields.length).fill("");row.forEach((x,i)=>{if(i<a.length)a[i]=x==null?"":String(x)});return a})}
+    if(v.lists)migrateLists(v.lists);if(v.active&&(BYID[v.active]||v.active==="_lists"||v.active==="_summary"))S.active=v.active;if(typeof v.clean==="boolean")S.cleanOnEntry=v.clean;if(v.textRules)S.textRules=Object.assign(S.textRules,v.textRules);$("saved").textContent="Draft restored from this browser"}res()};r.onerror=()=>res()})}catch(e){}}
+
+function migrateLists(old){
+  for(const L of LISTS){const a=old[L.list];if(!Array.isArray(a)||S.data[L.id].length)continue;
+    for(const code of a){const row=new Array(L.fields.length).fill("");row[L.ix.Code]=String(code);S.data[L.id].push(row)}}
+  const EX={ex_ag:["ag","Asset Group"],ex_asset:["an","Asset Number"],ex_act:["act","Activity Name"],ex_area:["area","Area"],ex_meter:["met","Name"],ex_cat:["cat","Category Code"]};
+  for(const [key,[sid,fld]] of Object.entries(EX)){const a=old[key];if(!Array.isArray(a))continue;const sh=BYID[sid];
+    for(const val of a){const row=new Array(sh.fields.length).fill("");if(sh.split&&sh.split[fld]){const p=sh.split[fld](String(val));for(const x in p)row[sh.ix[x]]=p[x]}else row[sh.ix[fld]]=String(val);row[sh.ix[FLAG]]="Y";S.data[sid].push(row)}}
+}
+
+
+/* ============ AI provider settings (standalone use) ============ */
+const PROVIDERS={
+  anthropic:{label:"Anthropic (Claude API)",base:"https://api.anthropic.com",model:"claude-sonnet-5",key:true,kind:"anthropic",hint:"Key starts with sk-ant-. Sent only to api.anthropic.com."},
+  openai:{label:"OpenAI",base:"https://api.openai.com/v1",model:"",key:true,kind:"openai",hint:"Enter the model name your account uses."},
+  ollama:{label:"Ollama (local)",base:"http://localhost:11434/v1",model:"",key:false,kind:"openai",hint:"Runs on this PC. If Test can't connect, set OLLAMA_ORIGINS=* and restart Ollama."},
+  lmstudio:{label:"LM Studio (local)",base:"http://localhost:1234/v1",model:"",key:false,kind:"openai",hint:"Start the LM Studio server and turn on CORS in its server settings."},
+  custom:{label:"Other OpenAI-compatible",base:"",model:"",key:false,kind:"openai",hint:"Any endpoint that speaks the OpenAI chat completions format."}};
+let CFG={provider:"anthropic",base:PROVIDERS.anthropic.base,model:PROVIDERS.anthropic.model,tools:true};let AIKEY="";
+try{const c=JSON.parse(localStorage.getItem("eamlb-ai")||"null");if(c&&PROVIDERS[c.provider])CFG=Object.assign(CFG,c)}catch(e){}
+const b64=u=>btoa(String.fromCharCode(...new Uint8Array(u))),ub64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+async function deriveKey(pass,salt){const base=await crypto.subtle.importKey("raw",new TextEncoder().encode(pass),"PBKDF2",false,["deriveKey"]);
+  return crypto.subtle.deriveKey({name:"PBKDF2",salt,iterations:200000,hash:"SHA-256"},base,{name:"AES-GCM",length:256},false,["encrypt","decrypt"])}
+async function sealKey(key,pass){const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12));const k=await deriveKey(pass,salt);
+  const data=await crypto.subtle.encrypt({name:"AES-GCM",iv},k,new TextEncoder().encode(key));localStorage.setItem("eamlb-ai-key",JSON.stringify({salt:b64(salt),iv:b64(iv),data:b64(data),provider:CFG.provider}))}
+async function openKey(pass){const o=JSON.parse(localStorage.getItem("eamlb-ai-key")||"null");if(!o)return "";const k=await deriveKey(pass,ub64(o.salt));
+  const pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:ub64(o.iv)},k,ub64(o.data));return new TextDecoder().decode(pt)}
+function storedKey(){try{return !!localStorage.getItem("eamlb-ai-key")}catch(e){return false}}
+function aiReady(){const P=PROVIDERS[CFG.provider];return !!(CFG.base&&CFG.model&&(!P.key||AIKEY))}
+function aiWho(){if(sampleFn)return "Using Claude through your claude.ai account.";const P=PROVIDERS[CFG.provider];
+  if(!CFG.model)return "No AI provider set up yet. Open Settings.";if(P.key&&!AIKEY)return `${P.label}, ${CFG.model}: key ${storedKey()?"locked (enter passphrase in Settings)":"not entered"}.`;return `Using ${P.label}, ${CFG.model}.`}
+function openAISettings(unlock){
+  const inClaude=!!sampleFn;const P=PROVIDERS[CFG.provider];
+  modal(`<h2>AI settings</h2>${inClaude?`<p>This page is running inside claude.ai, so Ask uses your Claude account and these settings aren't needed here. They apply when you open the tool as a standalone HTML file.</p>`:`<p>Used by Ask when the tool runs as a standalone file. Keys stay in this browser and are sent only to the provider's address below.</p>`}
+  <div class="fld">
+   <label for="aiProv">Provider</label><select id="aiProv">${Object.entries(PROVIDERS).map(([k,v])=>`<option value="${k}"${k===CFG.provider?" selected":""}>${esc(v.label)}</option>`).join("")}</select>
+   <label for="aiBase">Address</label><input id="aiBase" value="${esc(CFG.base)}" spellcheck="false">
+   <label for="aiModel">Model</label><div style="display:flex;gap:6px"><input id="aiModel" list="aiModels" value="${esc(CFG.model)}" spellcheck="false"><datalist id="aiModels"></datalist><button class="btn sm" id="aiList">List models</button></div>
+   <label for="aiKey">API key</label><div style="display:flex;gap:6px"><input id="aiKey" type="password" autocomplete="off" placeholder="${AIKEY?"Key loaded for this session":storedKey()?"Saved and locked":""}" spellcheck="false"><button class="btn sm" id="aiShow">Show</button></div>
+   <span class="hint" id="aiHint">${esc(P.hint)}</span>
+   <label for="aiTools">Tools</label><label class="chk" style="font-family:var(--body);font-weight:400"><input type="checkbox" id="aiTools"${CFG.tools?" checked":""}> Let the model read rows and propose changes</label>
+   <span class="hint">Turn off for local models that don't support tool calling; Ask then answers from the sheet summary only.</span>
+   <label for="aiRemember">Remember key</label><label class="chk" style="font-family:var(--body);font-weight:400"><input type="checkbox" id="aiRemember"${storedKey()?" checked":""}> Save on this computer, encrypted with a passphrase</label>
+   <label for="aiPass">Passphrase</label><input id="aiPass" type="password" autocomplete="off" placeholder="${storedKey()?"Enter to unlock the saved key":"Needed only to save the key"}">
+  </div>
+  <div class="stat" id="aiStat">${esc(aiWho())}</div>
+  <div class="row"><button class="btn" id="aiForget">Forget saved key</button><button class="btn" id="aiTest">Test</button><button class="btn" data-close>Close</button><button class="btn pri" id="aiSave">Save</button></div>`);
+  const st=(t,ok)=>{const e=$("aiStat");e.textContent=t;e.className="stat "+(ok===true?"ok":ok===false?"bad":"")};
+  $("aiProv").onchange=e=>{const v=PROVIDERS[e.target.value];$("aiBase").value=v.base;$("aiModel").value=v.model;$("aiHint").textContent=v.hint};
+  $("aiShow").onclick=()=>{const i=$("aiKey");i.type=i.type==="password"?"text":"password"};
+  const read=()=>({provider:$("aiProv").value,base:$("aiBase").value.trim().replace(/\/+$/,""),model:$("aiModel").value.trim(),tools:$("aiTools").checked});
+  async function unlockIfNeeded(){const pass=$("aiPass").value;if(!$("aiKey").value&&!AIKEY&&storedKey()&&pass){try{AIKEY=await openKey(pass);st("Saved key unlocked for this session.",true)}catch(e){st("Wrong passphrase.",false);throw e}}}
+  $("aiList").onclick=async()=>{const c=read();if(PROVIDERS[c.provider].kind!=="openai"){st("Model list is for OpenAI-compatible providers. For Claude, enter the model name.");return}
+    try{await unlockIfNeeded();const key=$("aiKey").value.trim()||AIKEY;const r=await fetch(c.base+"/models",{headers:key?{Authorization:"Bearer "+key}:{}});const j=await r.json();
+      const ids=(j.data||j.models||[]).map(m=>m.id||m.name).filter(Boolean);$("aiModels").innerHTML=ids.map(i=>`<option value="${esc(i)}">`).join("");st(ids.length?`${ids.length} models found. Pick one in the Model box.`:"No models reported.",!!ids.length)}
+    catch(e){st(netMsg(c.base,e),false)}};
+  $("aiTest").onclick=async()=>{const c=read();try{await unlockIfNeeded()}catch(e){return}const key=$("aiKey").value.trim()||AIKEY;if(!c.model){st("Enter a model first.",false);return}if(PROVIDERS[c.provider].key&&!key){st("Enter the API key first.",false);return}
+    st("Testing…");try{const t=await llmCall(c,key,"You are a connection test.",[{role:"user",content:"Reply with the single word OK."}],null,null,new AbortController().signal);st("Connected. Reply: "+String(t).slice(0,60),true)}catch(e){st(e.friendly||String(e.message||e),false)}};
+  $("aiForget").onclick=()=>{localStorage.removeItem("eamlb-ai-key");AIKEY="";$("aiRemember").checked=false;st("Saved key removed from this computer.",true);refreshWho()};
+  $("aiSave").onclick=async()=>{const c=read();const typed=$("aiKey").value.trim();
+    try{await unlockIfNeeded()}catch(e){return}
+    if(typed)AIKEY=typed;
+    if($("aiRemember").checked&&typed){const pass=$("aiPass").value;if(pass.length<8){st("Use a passphrase of at least 8 characters to save the key.",false);return}await sealKey(typed,pass)}
+    if(!$("aiRemember").checked&&storedKey()&&typed)localStorage.removeItem("eamlb-ai-key");
+    CFG=Object.assign(CFG,c);try{localStorage.setItem("eamlb-ai",JSON.stringify(CFG))}catch(e){}
+    refreshWho();closeModal();toast(aiReady()||sampleFn?"AI settings saved":"Saved. Add a model"+(PROVIDERS[c.provider].key&&!AIKEY?" and key":"")+" to use Ask.")};
+  if(unlock)setTimeout(()=>$("aiPass").focus(),50);
+}
+function netMsg(base,e){if(e&&e.name==="AbortError")return "Stopped.";return `Couldn't reach ${base}. ${/localhost|127\.0\.0\.1/.test(base)?"Check the local server is running and allows requests from this page (CORS).":"Check the address and your network."}`}
+async function llmCall(c,key,system,turns,tools,onNote,signal){
+  const P=PROVIDERS[c.provider];const T=tools?Object.fromEntries(tools.map(t=>[t.name,t])):{};
+  turns=turns.reduce((a,t)=>{const l=a[a.length-1];if(l&&l.role===t.role)l.content+="\n\n"+t.content;else a.push({role:t.role,content:t.content});return a},[]);
+  const run=async(name,input)=>{const t=T[name];if(!t)throw new Error("Unknown tool "+name);return JSON.stringify(await t.execute(input||{},{signal})).slice(0,32000)};
+  const post=async(url,headers,body)=>{let r;try{r=await fetch(url,{method:"POST",headers:Object.assign({"content-type":"application/json"},headers),body:JSON.stringify(body),signal})}catch(e){const x=new Error(netMsg(c.base,e));x.friendly=x.message;x.code=e.name==="AbortError"?"cancelled":"network";throw x}
+    let j=null;try{j=await r.json()}catch(e){}
+    if(!r.ok){const m=(j&&j.error&&(j.error.message||j.error))||r.statusText;const x=new Error(String(m));x.friendly=r.status===401||r.status===403?"The provider rejected the key.":r.status===404?`Not found. Check the model name "${c.model}" and the address.`:r.status===429?"Rate limited by the provider. Try again shortly.":`Provider error ${r.status}: ${m}`;throw x}return j};
+  if(P.kind==="anthropic"){
+    const msgs=turns.map(t=>({role:t.role,content:t.content}));
+    for(let round=0;round<8;round++){
+      const body={model:c.model,max_tokens:2048,system,messages:msgs};
+      if(tools&&round<7)body.tools=tools.map(t=>({name:t.name,description:t.description,input_schema:t.inputSchema||{type:"object",properties:{}}}));
+      const j=await post(c.base+"/v1/messages",{"x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body);
+      const text=(j.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n").trim();
+      const uses=(j.content||[]).filter(b=>b.type==="tool_use");
+      if(j.stop_reason!=="tool_use"||!uses.length)return text||"(No answer.)";
+      msgs.push({role:"assistant",content:j.content});const results=[];
+      for(const u of uses){try{results.push({type:"tool_result",tool_use_id:u.id,content:await run(u.name,u.input)})}catch(e){results.push({type:"tool_result",tool_use_id:u.id,content:"Error: "+(e.message||e),is_error:true})}}
+      msgs.push({role:"user",content:results})}
+    return "(Stopped after too many steps. Ask for less at a time.)"}
+  const msgs=[{role:"system",content:system},...turns.map(t=>({role:t.role,content:t.content}))];
+  for(let round=0;round<8;round++){
+    const body={model:c.model,messages:msgs};
+    if(tools&&round<7)body.tools=tools.map(t=>({type:"function",function:{name:t.name,description:t.description,parameters:t.inputSchema||{type:"object",properties:{}}}}));
+    const j=await post(c.base+"/chat/completions",key?{Authorization:"Bearer "+key}:{},body);
+    const m=(j.choices&&j.choices[0]&&j.choices[0].message)||{};
+    if(!m.tool_calls||!m.tool_calls.length)return (m.content||"").trim()||"(No answer.)";
+    msgs.push(m);
+    for(const tc of m.tool_calls){let out;try{let args={};try{args=JSON.parse(tc.function.arguments||"{}")}catch(e){}out=await run(tc.function.name,args)}catch(e){out="Error: "+(e.message||e)}msgs.push({role:"tool",tool_call_id:tc.id,content:out})}}
+  return "(Stopped after too many steps. Ask for less at a time.)"
+}
+function refreshWho(){const e=$("chatWho");if(e)e.textContent=aiWho()}
+$("bAI").onclick=()=>openAISettings(false);
+/* ============ Ask: chat with the data (claude.ai "sample" capability) ============ */
+let sampleFn=null,samplePromise=null,chatTurns=[],chatCtl=null,chatBusy=false,chatNotes=[],propSeq=0;const PROPS={};
+function getSample(){if(!samplePromise)samplePromise=(window.claude&&window.claude.use?window.claude.use("sample").catch(()=>null):Promise.resolve(null)).then(f=>sampleFn=f);return samplePromise}
+getSample();
+function sheetBy(x){x=String(x||"");return BYID[x]||ALL.find(s=>norm(s.name)===norm(x))||ALL.find(s=>norm(s.name).startsWith(norm(x)))}
+function fieldOf(sh,f){f=String(f||"");return sh.fields.find(fl=>fl.n===f)||sh.fields.find(fl=>norm(fl.n)===norm(f))}
+function rowIssues(sh,d){const ri=V[sh.id].rows.get(d);if(!ri)return [];const out=[];for(const [c,ce] of ri.cells)for(const m of ce.msgs)out.push((m[0]==="e"?"Error":"Warning")+" on "+sh.fields[c].n+": "+m[1]);for(const m of ri.msgs)out.push((m[0]==="e"?"Error":"Warning")+": "+m[1]);return out}
+function rowObj(sh,d){const row=S.data[sh.id][d]||[];const v={};sh.fields.forEach((fl,i)=>{if(row[i])v[fl.n]=row[i]});return {row:d+1,values:v,issues:rowIssues(sh,d)}}
+function matches(sh,row,d,flt){if(!flt)return true;const fl=fieldOf(sh,flt.field);if(flt.field&&!fl)return false;
+  if(fl){const v=(row[sh.ix[fl.n]]||"");const q=String(flt.value??"");const op=flt.op||"equals";
+    if(op==="equals"&&v!==q)return false;if(op==="contains"&&!v.toLowerCase().includes(q.toLowerCase()))return false;if(op==="blank"&&v)return false;if(op==="not_blank"&&!v)return false;if(op==="not_equals"&&v===q)return false}
+  return true}
+const CHAT_TOOLS=[
+ {name:"get_rows",description:"Read rows from one sheet. Returns total matching and up to 40 rows (row number as shown in the grid, non-empty values, and each row's current validation issues). Filter by one field and/or only rows with issues.",
+  inputSchema:{type:"object",properties:{sheet:{type:"string",description:"Sheet id or name"},field:{type:"string"},op:{type:"string",enum:["equals","not_equals","contains","blank","not_blank"]},value:{type:"string"},issues:{type:"string",enum:["any","errors","warnings_or_errors"]},offset:{type:"integer"},limit:{type:"integer"}},required:["sheet"]},
+  execute(inp){const sh=sheetBy(inp.sheet);if(!sh)throw new Error("Unknown sheet "+inp.sheet);note(`Reading ${sh.name}`);const rows=S.data[sh.id];const res=V[sh.id];const flt=inp.field?{field:inp.field,op:inp.op,value:inp.value}:null;
+   if(inp.field&&!fieldOf(sh,inp.field))throw new Error("Unknown field "+inp.field+". Fields: "+sh.fields.map(f=>f.n).join(", "));
+   const hit=[];rows.forEach((row,d)=>{if(isBlank(row)||!matches(sh,row,d,flt))return;const ri=res.rows.get(d);if(inp.issues==="errors"&&!(ri&&ri.sev==="e"))return;if(inp.issues==="warnings_or_errors"&&!ri)return;hit.push(d)});
+   const off=Math.max(0,+inp.offset||0),lim=Math.min(40,Math.max(1,+inp.limit||25));return {sheet:sh.name,total_matching:hit.length,offset:off,rows:hit.slice(off,off+lim).map(d=>rowObj(sh,d))}}},
+ {name:"get_issues",description:"Summarize validation issues on one sheet: each issue type with severity, count and up to 10 example row numbers.",
+  inputSchema:{type:"object",properties:{sheet:{type:"string"}},required:["sheet"]},
+  execute(inp){const sh=sheetBy(inp.sheet);if(!sh)throw new Error("Unknown sheet "+inp.sheet);note(`Checking issues on ${sh.name}`);const r=V[sh.id];
+   return {sheet:sh.name,rows:r.n,error_rows:r.er,warning_rows:r.wr,issues:[...r.groups.values()].sort((a,b)=>b.rows.length-a.rows.length).slice(0,40).map(g=>({severity:g.sev==="e"?"error":"warning",issue:g.label,count:g.rows.length,example_rows:[...new Set(g.rows)].slice(0,10).map(x=>x+1)}))}}},
+ {name:"distinct_values",description:"Distinct values in one field of a sheet with how many rows use each (top 60), plus the reference list or linked sheet the field is checked against.",
+  inputSchema:{type:"object",properties:{sheet:{type:"string"},field:{type:"string"}},required:["sheet","field"]},
+  execute(inp){const sh=sheetBy(inp.sheet);if(!sh)throw new Error("Unknown sheet "+inp.sheet);const fl=fieldOf(sh,inp.field);if(!fl)throw new Error("Unknown field "+inp.field+". Fields: "+sh.fields.map(f=>f.n).join(", "));note(`Counting ${fl.n} on ${sh.name}`);
+   const m=new Map();for(const row of S.data[sh.id]){if(isBlank(row))continue;const v=row[sh.ix[fl.n]]||"(blank)";m.set(v,(m.get(v)||0)+1)}
+   return {sheet:sh.name,field:fl.n,rule:fieldRule(fl)||typeLabel(fl),distinct:m.size,values:[...m.entries()].sort((a,b)=>b[1]-a[1]).slice(0,60).map(([value,rows])=>({value,rows}))}}},
+ {name:"propose_changes",description:"Stage changes to ONE sheet for the user to review. Nothing is applied until the user selects Apply. ops: set a field on a row, add a new row, or delete a row. Row numbers are as shown in the grid. Max 500 ops. Returns how many ops were accepted and why any were rejected.",
+  inputSchema:{type:"object",properties:{sheet:{type:"string"},summary:{type:"string",description:"One sentence on what the change does and why"},ops:{type:"array",items:{type:"object",properties:{op:{type:"string",enum:["set","add","delete"]},row:{type:"integer"},field:{type:"string"},value:{type:"string"},values:{type:"object",description:"For add: field name to value"}},required:["op"]}}},required:["sheet","summary","ops"]},
+  execute(inp){const sh=sheetBy(inp.sheet);if(!sh)throw new Error("Unknown sheet "+inp.sheet);const n=S.data[sh.id].length;const ok=[],bad=[];
+   for(const o of (Array.isArray(inp.ops)?inp.ops:[]).slice(0,500)){const op=String(o.op);
+    if(op==="set"){const fl=fieldOf(sh,o.field),r=+o.row;if(!fl){bad.push(`unknown field ${o.field}`);continue}if(!(r>=1&&r<=n)||isBlank(S.data[sh.id][r-1])){bad.push(`row ${o.row} not found`);continue}ok.push({op,row:r,field:fl.n,value:String(o.value??""),old:S.data[sh.id][r-1][sh.ix[fl.n]]||""})}
+    else if(op==="delete"){const r=+o.row;if(!(r>=1&&r<=n)||isBlank(S.data[sh.id][r-1])){bad.push(`row ${o.row} not found`);continue}ok.push({op,row:r})}
+    else if(op==="add"){const vals={};for(const [k,v] of Object.entries(o.values||{})){const fl=fieldOf(sh,k);if(fl)vals[fl.n]=String(v??"");else bad.push(`unknown field ${k} in add`)}if(Object.keys(vals).length)ok.push({op,values:vals})}
+    else bad.push(`unknown op ${op}`)}
+   if(!ok.length)throw new Error("No valid changes. "+bad.slice(0,10).join("; "));
+   const id=++propSeq;PROPS[id]={id,sid:sh.id,summary:String(inp.summary||"Proposed changes"),ops:ok,state:"open"};renderProp(PROPS[id]);
+   return {staged:true,proposal:id,accepted:ok.length,rejected:bad.slice(0,20),note:"Waiting for the user to review and apply. Do not say the changes were made."}}}
+];
+function chatContext(){
+  const lines=SHEETS.filter(s=>V[s.id].n).map(s=>`- ${s.name} (id ${s.id}): ${V[s.id].n} rows, ${V[s.id].er} with errors, ${V[s.id].wr} with warnings only`);
+  const lists=LISTS.map(l=>`${l.name}: ${LSET[l.list]?LSET[l.list].n+" values":"empty (not checked)"}`).join("; ");
+  const empty=SHEETS.filter(s=>!V[s.id].n).map(s=>s.name).join(", ");
+  let where="";if(BYID[S.active]){const sh=cur();const d=dr(sel.r);where=`The user is looking at ${sh.name}${S.data[sh.id][d]&&!isBlank(S.data[sh.id][d])?`, row ${d+1}, field ${sh.fields[sel.c].n}`:""}.`}
+  return `You are the assistant inside "eAM load builder", a browser tool for preparing Oracle eAM conversion data. Sheets follow the Oracle eAM conversion template in load order; a validator flags errors and warnings live. Reference lists hold valid Oracle codes; an empty list means that field is not checked. Rows marked "Already in Oracle" = Y exist in Oracle, count as valid parents and are not loaded.
+
+Sheets with data:
+${lines.join("\n")||"(none yet)"}
+Empty sheets: ${empty||"none"}
+Reference lists: ${lists}
+${where}
+
+How to work:
+- Use the tools to read real rows before answering questions about the data. Quote counts and row numbers from tool results; never guess them.
+- To change data, call propose_changes. The user reviews and applies it; never say a change was made unless a later message says it was applied.
+- Only fix what the data itself supports. If a fix needs Oracle values that are not in the sheets or lists (for example valid departments), say so and ask instead of inventing codes.
+- Keep answers short and plain. No markdown tables or headings; short lines are fine.`}
+let curBubble=null;
+function note(t){const m=$("msgs");const el=document.createElement("div");el.className="tool";el.textContent=t+"…";if(curBubble&&curBubble.parentNode===m)m.insertBefore(el,curBubble);else m.appendChild(el);m.scrollTop=m.scrollHeight}
+function addMsg(cls,text){const m=$("msgs");const el=document.createElement("div");el.className="msg "+cls;el.textContent=text;m.appendChild(el);m.scrollTop=m.scrollHeight;return el}
+function renderProp(P){const sh=BYID[P.sid];const el=document.createElement("div");el.className="prop";el.id="prop"+P.id;
+  const desc=o=>o.op==="set"?`Row ${o.row}, ${o.field}: "${o.old}" → "${o.value}"`:o.op==="delete"?`Delete row ${o.row}`:`Add row: ${Object.entries(o.values).slice(0,4).map(([k,v])=>k+" = "+v).join(", ")}`;
+  el.innerHTML=`<h4>Proposed: ${esc(sh.name)}, ${nfmt(P.ops.length)} change${P.ops.length===1?"":"s"}</h4><div>${esc(P.summary)}</div><ul>${P.ops.slice(0,12).map(o=>`<li>${esc(desc(o))}</li>`).join("")}</ul>${P.ops.length>12?`<div class="muted">and ${nfmt(P.ops.length-12)} more</div>`:""}<div class="acts"><button class="btn pri sm" data-apply="${P.id}">Apply</button><button class="btn sm" data-discard="${P.id}">Discard</button></div>`;
+  $("msgs").appendChild(el);$("msgs").scrollTop=$("msgs").scrollHeight}
+$("msgs").addEventListener("click",e=>{const a=e.target.closest("[data-apply]"),x=e.target.closest("[data-discard]");
+  if(a)applyProp(+a.dataset.apply);if(x){const P=PROPS[+x.dataset.discard];if(P.state!=="open")return;P.state="discarded";const el=$("prop"+P.id);el.classList.add("gone");el.querySelector(".acts").innerHTML='<span class="muted">Discarded</span>';chatNotes.push(`[The user discarded proposal ${P.id}.]`)}});
+function applyProp(id){const P=PROPS[id];if(!P||P.state!=="open")return;const sh=BYID[P.sid];
+  snapshot([P.sid],"Changes from Ask");const rows=S.data[P.sid];const touched=new Set();const clean=(fl,v)=>S.cleanOnEntry?cleanVal(fl,v):v;
+  let stale=0;for(const o of P.ops.filter(o=>o.op==="set")){const r=rows[o.row-1];const c=sh.ix[o.field];if(!r){stale++;continue}if((r[c]||"")!==o.old){stale++;continue}r[c]=clean(sh.fields[c],o.value);touched.add(r)}
+  const del=new Set(P.ops.filter(o=>o.op==="delete").map(o=>rows[o.row-1]).filter(Boolean));
+  let out=rows.filter(r=>!del.has(r));
+  for(const o of P.ops.filter(o=>o.op==="add")){const r=new Array(sh.fields.length).fill("");for(const [k,v] of Object.entries(o.values))r[sh.ix[k]]=clean(sh.fields[sh.ix[k]],v);out.push(r);touched.add(r)}
+  S.data[P.sid]=out;P.state="applied";
+  if(S.active!==P.sid)openSheet(P.sid);changed();
+  const idx=new Set();out.forEach((r,i)=>{if(touched.has(r))idx.add(i)});
+  entryResult(`Applied from Ask: ${nfmt(P.ops.length-stale)} change${P.ops.length-stale===1?"":"s"}${del.size?`, ${del.size} row${del.size===1?"":"s"} deleted`:""}`,idx);
+  const res=V[P.sid];let e=0,w=0;for(const i of idx){const ri=res.rows.get(i);if(ri)ri.sev==="e"?e++:w++}
+  const el=$("prop"+id);el.classList.add("done");el.querySelector(".acts").innerHTML=`<span style="color:var(--ok)">Applied.</span> <span class="muted">${stale?stale+" skipped because the cell changed since. ":""}Undo reverses it.</span>`;
+  chatNotes.push(`[The user applied proposal ${id} to ${sh.name}: ${P.ops.length-stale} changes${stale?`, ${stale} skipped as stale`:""}. After validation, ${e} of the changed/added rows have errors and ${w} have warnings only.]`)}
+function chatAvail(){return sampleFn}
+async function sendChat(text){
+  text=String(text||"").trim();if(!text||chatBusy)return;
+  await getSample();
+  if(!sampleFn&&!aiReady()){addMsg("sys",storedKey()&&CFG.model?"Your saved key is locked. Enter your passphrase in Settings to unlock it.":"Set up an AI provider first: select Settings above.");openAISettings(storedKey());return}
+  addMsg("u",text);$("chatBox").value="";
+  const content=(chatNotes.length?chatNotes.join("\n")+"\n\n":"")+text;chatNotes=[];
+  chatTurns.push({role:"user",content});
+  while(JSON.stringify(chatTurns).length>30000&&chatTurns.length>2)chatTurns.splice(0,2);
+  const bubble=addMsg("a","Thinking…");curBubble=bubble;chatBusy=true;chatCtl=new AbortController();$("chatStop").disabled=false;$("chatSend").disabled=true;
+  let got=false;
+  try{
+    if(!sampleFn){
+      const tools=CFG.tools?CHAT_TOOLS:null;
+      const text=await llmCall(CFG,AIKEY,chatContext()+(tools?"":"\n\n(Row-level tools are off; answer from the summary above.)"),chatTurns,tools,null,chatCtl.signal);
+      bubble.textContent=text;chatTurns.push({role:"assistant",content:text});return}
+    const lim=await sampleFn.limits().catch(()=>null);
+    const opts={signal:chatCtl.signal,onText:({text:t})=>{got=true;bubble.textContent=t;$("msgs").scrollTop=$("msgs").scrollHeight}};
+    if(lim&&lim.tools)opts.tools=CHAT_TOOLS;else opts.cache=false;
+    const turns=[{role:"user",content:chatContext()+(opts.tools?"":"\n\n(Row-level tools are unavailable in this view; answer from the summary above.)")},{role:"assistant",content:"Understood."},...chatTurns];
+    const r=await sampleFn(turns,opts);
+    bubble.textContent=r.text;chatTurns.push({role:"assistant",content:r.text});
+    if(r.truncated)addMsg("sys","Cut short. Ask for less at a time.");
+  }catch(e){
+    if(!sampleFn&&e&&e.code!=="cancelled"){bubble.remove();addMsg("err",e.friendly||String(e.message||e));return}
+    const code=e&&e.code;if(e&&e.text)bubble.textContent=e.text;else if(!got)bubble.remove();
+    if(e&&e.text)chatTurns.push({role:"assistant",content:e.text});
+    const msg={cancelled:"Stopped.",not_granted:"Ask wasn't allowed for this page, so it's off for now. Reload to be asked again.",sampling_disabled:"Claude isn't available for this account.",rate_limited:"Too many requests right now. Try again in a minute.",session_expired:"Your claude.ai session expired. Sign in again.",prompt_too_large:"That was too much data at once. Ask about a narrower set of rows.",refused:"Claude declined that request. Try rephrasing.",empty_completion:"No answer came back. Try a simpler question.",tools_unavailable:"Row-level reading isn't available in this view."}[code]||"Something went wrong. Try again.";
+    addMsg(code==="cancelled"?"sys":"err",msg);
+  }finally{chatBusy=false;curBubble=null;$("chatStop").disabled=true;$("chatSend").disabled=false}
+}
+function openChat(){const w=$("wrap");w.classList.toggle("chatting");if(w.classList.contains("chatting")){
+  if(!$("msgs").children.length){addMsg("sys","Ask about the data or request a fix. Claude reads the sheets and proposes changes for you to apply.");
+    const sg=document.createElement("div");sg.className="sugg";
+    ["What's wrong with the open sheet?","Which errors can be fixed from the data itself?","Summarize the PM schedules by frequency"].forEach(q=>{const b=document.createElement("button");b.className="btn sm";b.textContent=q;b.onclick=()=>sendChat(q);sg.appendChild(b)});$("msgs").appendChild(sg)}
+  $("chatBox").focus()}}
+$("bAsk").onclick=()=>{openChat();getSample().then(refreshWho)};$("chatCfg").onclick=()=>openAISettings(false);$("chatClose").onclick=()=>$("wrap").classList.remove("chatting");
+$("chatSend").onclick=()=>sendChat($("chatBox").value);
+$("chatStop").onclick=()=>chatCtl&&chatCtl.abort();
+$("chatBox").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendChat($("chatBox").value)}});
+/* ============ boot ============ */
+(async function(){
+  await load();$("autoclean").checked=S.cleanOnEntry;
+  if(matchMedia("(max-width:1100px)").matches)$("bIss").style.display="inline-block";
+  validateAll();openSheet(S.active);
+})();
+</script>
+</body>
+</html>
