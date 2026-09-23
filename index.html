@@ -251,6 +251,7 @@ button{cursor:pointer}
       <button class="btn sm" id="bClearSheet">Clear sheet</button>
       <span class="sep"></span>
       <button class="btn sm pri" id="bLoadDF" title="Send the selected rows to DataFlow on this PC to load them into Oracle">▶ Load selected</button>
+      <button class="btn sm" id="bCheckDF" title="Ask DataFlow which rows on this sheet are already in Oracle and mark them Already in Oracle (read-only — nothing is changed in Oracle)">✓ Check Oracle</button>
       <span class="sep"></span>
       <label class="chk"><select id="fView" class="btn sm"><option value="all">All rows</option><option value="issues">Rows with issues</option><option value="errors">Rows with errors</option></select></label>
       <span class="muted" id="rowcount" style="font-size:13px"></span>
@@ -1017,7 +1018,26 @@ function dfApply(sid,s,sent){const sh=BYID[sid];const keyCol=outCols(sh,true)[0]
   const rows=(s.loadedRows||[]).filter(d=>S.data[sid][d]&&String(S.data[sid][d][keyCol]||"")===sent.get(d));
   if(rows.length){snapshot([sid],"Mark rows loaded by DataFlow");rows.forEach(d=>S.data[sid][d][j]="Y");changed()}
   const skipped=(s.loadedRows||[]).length-rows.length;
-  toast(s.state==="done"?`DataFlow: ${s.message||"done"}. ${rows.length} row${rows.length===1?"":"s"} marked Already in Oracle.${skipped?` ${skipped} changed here meanwhile — check them.`:""}`:`DataFlow ${s.state}: ${s.message||"nothing was loaded"}`)}
+  const marked=`${rows.length} row${rows.length===1?"":"s"} marked Already in Oracle.${skipped?` ${skipped} changed here meanwhile — check them.`:""}`;
+  toast(s.state==="done"?`DataFlow: ${s.message||"done"}. ${marked}`:`DataFlow ${s.state}: ${s.message||"nothing was loaded"}.${rows.length?" "+marked:""}`)}
+async function dfCheckOracle(){const sh=BYID[S.active];if(!sh||sh.list){toast("Open a sheet first.");return}
+  const j=sh.ix[FLAG];if(j==null){toast(`This sheet has no "${FLAG}" column to mark.`);return}
+  const pick=[];for(let d=0;d<S.data[sh.id].length;d++){const row=S.data[sh.id][d];if(!isBlank(row)&&!isFlag(sh,row))pick.push(d)}
+  if(!pick.length){toast("Every row on this sheet is already marked Already in Oracle.");return}
+  let tok=null;try{tok=localStorage.getItem(DF_KEY)}catch(e){}if(!tok)tok=await dfPair();if(!tok)return;
+  const cols=outCols(sh,true),val=(d,[f,i])=>String(outVal(f,S.data[sh.id][d][i]||""));
+  const sent=new Map(pick.map(d=>[d,val(d,cols[0])]));
+  const body={sheet:sh.name,headers:cols.map(([f])=>f.n),rows:pick.map(d=>cols.map(c=>val(d,c))),sourceRows:pick};
+  toast(`Checking ${pick.length} row${pick.length>1?"s":""} in Oracle…`);
+  let res;try{res=await fetch(DF_URL+"/check",{method:"POST",headers:{"Content-Type":"application/json","X-DataFlow-Token":tok},body:JSON.stringify(body)})}
+  catch(e){toast("DataFlow isn't reachable. Start DataFlow on this PC, then click Check Oracle again.");return}
+  if(res.status===401){try{localStorage.removeItem(DF_KEY)}catch(e){}toast("DataFlow didn't accept the pairing code. Click Check Oracle again to re-enter it.");return}
+  let r={};try{r=await res.json()}catch(e){}
+  if(!res.ok){toast("DataFlow couldn't check Oracle: "+(r.error||res.status));return}
+  // Mark only rows that still hold the key that was checked (the sheet may have been edited while waiting).
+  const rows=(r.found||[]).filter(d=>S.data[sh.id][d]&&String(S.data[sh.id][d][cols[0][1]]||"")===sent.get(d));
+  if(rows.length){snapshot([sh.id],"Mark rows found in Oracle");rows.forEach(d=>S.data[sh.id][d][j]="Y");changed()}
+  toast(`Checked ${pick.length} row${pick.length>1?"s":""} in Oracle: ${rows.length} already there${rows.length?" — marked Already in Oracle":""}.`)}
 async function dfLoadSelected(){const sh=BYID[S.active];if(!sh||sh.list){toast("Open a sheet first.");return}
   const r0=Math.min(sel.r,sel.ar),r1=Math.max(sel.r,sel.ar),pick=[];
   for(let vr=r0;vr<=r1;vr++){const d=dr(vr);if(d==null||d>=dataRowCount())continue;const row=S.data[sh.id][d];if(isBlank(row)||isFlag(sh,row))continue;pick.push(d)}
@@ -1045,6 +1065,7 @@ async function dfLoadSelected(){const sh=BYID[S.active];if(!sh||sh.list){toast("
 /* toolbar */
 $("bUndo").onclick=undo;
 $("bLoadDF").onclick=dfLoadSelected;
+$("bCheckDF").onclick=dfCheckOracle;
 $("fView").onchange=e=>{S.view=e.target.value;focusRows=null;hideResult();sel={r:0,c:0,ar:0,ac:0};grid.scrollTop=0;refresh()};
 $("autoclean").onchange=e=>{S.cleanOnEntry=e.target.checked;scheduleSave()};
 $("bDel").onclick=()=>{const r0=Math.min(sel.r,sel.ar),r1=Math.max(sel.r,sel.ar);const del=new Set();for(let vr=r0;vr<=r1;vr++){const d=dr(vr);if(d!=null&&d<dataRowCount())del.add(d)}
