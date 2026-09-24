@@ -1059,6 +1059,12 @@ async function dfCheckOracle(){const sh=BYID[S.active];if(!sh||sh.list){toast("O
   if(!pick.length){toast("Every row on this sheet is already marked Already in Oracle.");return}
   dfPost(Object.assign({type:"check-oracle"},dfRows(sh,pick)));
   toast(`Checking ${pick.length} row${pick.length>1?"s":""} in Oracle…`)}
+// Update selected: the columns that find the record — the sheet's first key without Organization, else its first
+// required column other than Organization (the same default DataFlow's recipe wizard uses). Column indexes.
+function dfKeyCols(sh){const k0=(sh.keys||[])[0],names=(Array.isArray(k0)?k0:(k0&&k0.f)||[]).filter(n=>n!=="Organization");
+  let cols=names.map(n=>sh.fields.findIndex(fl=>fl.n===n)).filter(c=>c>=0);
+  if(!cols.length){const c=sh.fields.findIndex(fl=>fl.r&&!fl.tool&&fl.n!=="Organization");if(c>=0)cols=[c]}
+  return cols}
 // Load selected: create new records (rows marked Already in Oracle are skipped). Update selected: change existing
 // records with an update recipe, so rows marked Already in Oracle are sent too (DataFlow holds back rows not in Oracle).
 const dfLoadSelected=()=>dfSendSelected("create"),dfUpdateSelected=()=>dfSendSelected("update");
@@ -1069,11 +1075,18 @@ async function dfSendSelected(mode){const upd=mode==="update";const sh=BYID[S.ac
   // Errors on linked/list fields only mean "not found on this builder's own sheets or lists" — Oracle validates
   // those itself, and DataFlow's test run shows the result before anything is saved. Anything else (blank
   // required value, bad date/number, too long, duplicate row) Oracle would reject too, so it still blocks.
-  const hard=[],soft=[];
-  for(const d of pick){const ri=V[sh.id].rows.get(d);if(!ri||ri.sev!=="e")continue;
-    const refOnly=!ri.msgs.some(m=>m[0]==="e")&&[...ri.cells].every(([c,ce])=>ce.sev!=="e"||!!(sh.fields[c].ref||sh.fields[c].lk));
+  // Update: a blank cell never changes the form, so errors on blank non-key cells (e.g. "is required") don't block;
+  // a blank key does (the record can't be found). Value errors (bad date/number, too long, duplicate) still block.
+  const keys=upd?dfKeyCols(sh):[],blankCell=(d,c)=>String(S.data[sh.id][d][c]??"").trim()==="";
+  const hard=[],soft=[],noKey=[];
+  for(const d of pick){if(upd&&keys.some(c=>blankCell(d,c))){noKey.push(d);continue}
+    const ri=V[sh.id].rows.get(d);if(!ri||ri.sev!=="e")continue;
+    const cells=[...ri.cells].filter(([c,ce])=>ce.sev==="e"&&!(upd&&!keys.includes(c)&&blankCell(d,c)));
+    if(!ri.msgs.some(m=>m[0]==="e")&&!cells.length)continue;
+    const refOnly=!ri.msgs.some(m=>m[0]==="e")&&cells.every(([c])=>!!(sh.fields[c].ref||sh.fields[c].lk));
     (refOnly?soft:hard).push(d)}
-  if(hard.length){toast(`${hard.length} selected row${hard.length>1?"s have":" has"} errors Oracle would also reject (blank required value, bad date, too long or duplicate). Fix ${hard.length>1?"them":"it"} first.`);return}
+  if(noKey.length){toast(`${noKey.length} selected row${noKey.length>1?"s have":" has"} a blank ${keys.map(c=>sh.fields[c].n).join(" / ")} — DataFlow needs it to find the record. Fill ${noKey.length>1?"them":"it"} first.`);return}
+  if(hard.length){toast(`${hard.length} selected row${hard.length>1?"s have":" has"} errors Oracle would also reject (${upd?"blank key, ":"blank required value, "}bad date, too long or duplicate). Fix ${hard.length>1?"them":"it"} first.`);return}
   if(soft.length&&!(await dfConfirmRefs(soft.length,pick.length)))return;
   dfPost(Object.assign({type:"load-rows",mode},dfRows(sh,pick)));
   toast(upd?`Sent ${pick.length} row${pick.length>1?"s":""} to the Load workspace to update. Run the test there; rows not in Oracle are held back.`
