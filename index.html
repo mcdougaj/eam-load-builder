@@ -1012,9 +1012,11 @@ function dfConfirmRefs(n,total){return new Promise(res=>{let done=false;const fi
 const DF_HOST=!!(window.chrome&&window.chrome.webview);
 function dfPost(msg){if(DF_HOST)window.chrome.webview.postMessage(msg)}
 // Posted once after load() in host mode so DataFlow can build recipe drafts offline. Standalone posts nothing.
-function dfPostSchemas(){dfPost({type:"sheet-schemas",sheets:SHEETS.map(sh=>({sheet:sh.name,list:false,
+// A bad sheet definition (e.g. a ref to a missing sheet) must never stop host-mode startup: log it and carry on.
+function dfPostSchemas(){try{dfPost({type:"sheet-schemas",sheets:SHEETS.map(sh=>({sheet:sh.name,list:false,
   fields:sh.fields.map(fl=>({n:fl.n,t:fl.t,l:fl.l||0,r:!!fl.r,lk:fl.lk||null,
     ref:fl.ref?BYID[(fl.ref.any||[fl.ref])[0].s].name:null,en:fl.en||[]}))}))})}
+  catch(e){console.error("DataFlow: couldn't post sheet schemas",e)}}
 // References found in Oracle (sheet id -> Set of keys), and keys already asked about (key -> "?" pending | "n" not found).
 const DF_KNOWN=new Map(),DF_ASKED=new Map();let dfLookupQ=new Map(),dfLookupT=0,dfLookupErr=false;
 function dfQueueLookup(sid,fields,vals,kk){let a=DF_ASKED.get(sid);if(!a){a=new Map();DF_ASKED.set(sid,a)}a.set(kk,"?");
