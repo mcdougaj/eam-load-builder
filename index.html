@@ -311,7 +311,7 @@ const SHEETS=[
  derive:{"Category Code":g=>g("Segment1")&&g("Segment2")?g("Segment1")+"."+g("Segment2"):""},
  split:{"Category Code":v=>{const i=v.indexOf(".");return i<0?{Segment1:v}:{Segment1:v.slice(0,i),Segment2:v.slice(i+1)}}}},
 {id:"ag",g:"Foundation",name:"Asset Group",nav:"eAM Administrator > Assets > Asset Groups. Template must be a defined item template.",
- fields:[O(),f("Asset Group","t",40,1),f("Description","t",240,1),f("Template Name","t",30,1,{lk:"templates"}),f("Serial Generation","t",10),f("Starting Prefix","t",30),f("Starting Number","t",30)],keys:[["Organization","Asset Group"]],
+ fields:[O(),f("Asset Group","t",40,1),f("Description","t",240,1),f("Template Name","t",30,1,{lk:"templates"}),f("Serial Generation","e",10,1,{en:["Predefined","At Receipt"],hint:{"no control":"Asset groups must be serial-controlled in eAM (each asset number is a serial). Use Predefined or At Receipt."}}),f("Starting Prefix","t",30),f("Starting Number","t",30)],keys:[["Organization","Asset Group"]],rule:(g,add)=>{if(g("Serial Generation")==="Predefined")for(const n of ["Starting Prefix","Starting Number"])if(!g(n))add(n,"e",n+" is required when Serial Generation is Predefined",n+" required for Predefined")},
  rule(g,P,X){const o=g("Organization"),a=g("Asset Group");if(o&&a&&!X.set("ca",["Organization","Asset Group"]).has(k(o,a)))P("Asset Group","w","No category assigned to this asset group yet","Asset group has no category assignment")}},
 {id:"ca",g:"Foundation",name:"Category Assignment",nav:"Setup > Category > Category Sets (Enterprise Asset Management) > Assign",
  fields:[O(),f("Asset Group","t",40,1,{ref:rAG}),f("Category","t",90,1,{ref:rCat("Category")})],
