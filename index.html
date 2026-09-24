@@ -1022,6 +1022,8 @@ function dfOnMessage(m){if(!m||typeof m!=="object")return;
     const r=dfMark(m.sheet,m.found,m.keys);
     toast(`Checked ${m.checked} row${m.checked===1?"":"s"} in Oracle: ${r.marked} already there${r.marked?" — marked Already in Oracle":""}.`)}
   else if(m.type==="workbook-data")dfWorkbook(m);
+  else if(m.type==="workbook-error"){dfReady=false;dfErr=`Couldn't open workbook ${m.name}: ${m.message}. Nothing was changed.`;
+    toast(dfErr);$("saved").textContent=dfErr;if(dfWbWait){const f=dfWbWait;dfWbWait=null;f(null)}}
   else if(m.type==="error")toast("DataFlow: "+m.message)}
 if(DF_HOST)window.chrome.webview.addEventListener("message",e=>dfOnMessage(e.data));
 async function dfCheckOracle(){const sh=BYID[S.active];if(!sh||sh.list){toast("Open a sheet first.");return}
@@ -1263,21 +1265,22 @@ function applyState(v){if(!v||!v.data)return false;
   if(v.lists)migrateLists(v.lists);if(v.active&&(BYID[v.active]||v.active==="_lists"||v.active==="_summary"))S.active=v.active;
   if(typeof v.clean==="boolean")S.cleanOnEntry=v.clean;if(v.textRules)S.textRules=Object.assign(S.textRules,v.textRules);return true}
 // DataFlow edition: workbooks are files DataFlow owns. WB_NAME is the open workbook; dfWbWait resolves the startup request.
-let WB_NAME="",dfWbWait=null;
-function dfWorkbook(m){WB_NAME=m.name||"";if(dfWbWait){const f=dfWbWait;dfWbWait=null;f(m.state||null);return}
+// dfReady: a real workbook-data arrived, so saves may go to DataFlow (never after a timeout or workbook-error).
+let WB_NAME="",dfWbWait=null,dfReady=false,dfErr="";
+function dfWorkbook(m){WB_NAME=m.name||"";dfReady=true;dfErr="";if(dfWbWait){const f=dfWbWait;dfWbWait=null;f(m.state||null);return}
   // DataFlow switched workbooks while the page is open: start from empty, then apply the file.
   for(const s of ALL)S.data[s.id]=[];S.textRules={codeCase:"as_typed",flagRepeat:true,flagAllCaps:false};
   applyState(m.state);$("autoclean").checked=S.cleanOnEntry;validateAll();openSheet(BYID[S.active]||S.active==="_lists"||S.active==="_summary"?S.active:SHEETS[0].id);
   $("saved").textContent=(m.state?"Opened workbook ":"New workbook ")+WB_NAME}
 async function save(){
-  if(DF_HOST){dfPost({type:"workbook-save",name:WB_NAME,state:stateObj()});const d=new Date();$("saved").textContent=`Saved to ${WB_NAME||"workbook"} ${pad(d.getHours())}:${pad(d.getMinutes())}`;return}
+  if(DF_HOST){if(!dfReady)return;dfPost({type:"workbook-save",name:WB_NAME,state:stateObj()});const d=new Date();$("saved").textContent=`Saved to ${WB_NAME||"workbook"} ${pad(d.getHours())}:${pad(d.getMinutes())}`;return}
   try{if(!db)db=await idb();if(!db){$("saved").textContent="Autosave unavailable here. Export to keep your work.";return}
   const tx=db.transaction("s","readwrite");tx.objectStore("s").put(stateObj(),"draft");
   tx.oncomplete=()=>{const d=new Date();$("saved").textContent="Saved in this browser "+pad(d.getHours())+":"+pad(d.getMinutes())};
   tx.onerror=()=>{$("saved").textContent="Autosave failed. Export to keep your work."}}catch(e){$("saved").textContent="Autosave unavailable here. Export to keep your work."}}
 async function load(){
   if(DF_HOST){const v=await new Promise(res=>{dfWbWait=res;dfPost({type:"workbook-open"});setTimeout(()=>{if(dfWbWait===res){dfWbWait=null;res(null)}},5000)});
-    $("saved").textContent=(applyState(v)?"Opened workbook ":"New workbook ")+WB_NAME;return}
+    const ok=applyState(v);$("saved").textContent=dfReady?(ok?"Opened workbook ":"New workbook ")+WB_NAME:dfErr||"DataFlow didn't send the workbook. Nothing will be saved.";return}
   try{db=await idb();if(!db)return;await new Promise(res=>{const tx=db.transaction("s","readonly");const r=tx.objectStore("s").get("draft");
     r.onsuccess=()=>{if(applyState(r.result))$("saved").textContent="Draft restored from this browser";res()};r.onerror=()=>res()})}catch(e){}}
 
