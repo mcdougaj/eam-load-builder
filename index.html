@@ -1011,6 +1011,10 @@ function dfConfirmRefs(n,total){return new Promise(res=>{let done=false;const fi
 // Standalone edition: DF_HOST is false, the DataFlow buttons are removed at startup and nothing below posts anything.
 const DF_HOST=!!(window.chrome&&window.chrome.webview);
 function dfPost(msg){if(DF_HOST)window.chrome.webview.postMessage(msg)}
+// Posted once after load() in host mode so DataFlow can build recipe drafts offline. Standalone posts nothing.
+function dfPostSchemas(){dfPost({type:"sheet-schemas",sheets:SHEETS.map(sh=>({sheet:sh.name,list:false,
+  fields:sh.fields.map(fl=>({n:fl.n,t:fl.t,l:fl.l||0,r:!!fl.r,lk:fl.lk||null,
+    ref:fl.ref?BYID[(fl.ref.any||[fl.ref])[0].s].name:null,en:fl.en||[]}))}))})}
 // References found in Oracle (sheet id -> Set of keys), and keys already asked about (key -> "?" pending | "n" not found).
 const DF_KNOWN=new Map(),DF_ASKED=new Map();let dfLookupQ=new Map(),dfLookupT=0,dfLookupErr=false;
 function dfQueueLookup(sid,fields,vals,kk){let a=DF_ASKED.get(sid);if(!a){a=new Map();DF_ASKED.set(sid,a)}a.set(kk,"?");
@@ -1526,7 +1530,7 @@ $("chatStop").onclick=()=>chatCtl&&chatCtl.abort();
 $("chatBox").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendChat($("chatBox").value)}});
 /* ============ boot ============ */
 (async function(){
-  await load();$("autoclean").checked=S.cleanOnEntry;
+  await load();if(DF_HOST)dfPostSchemas();$("autoclean").checked=S.cleanOnEntry;
   if(matchMedia("(max-width:1100px)").matches)$("bIss").style.display="inline-block";
   validateAll();openSheet(S.active);
 })();
