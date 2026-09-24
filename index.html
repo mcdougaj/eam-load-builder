@@ -605,12 +605,16 @@ function checkRef(fl,g,X,add){
   const ref=fl.ref;const alts=ref.any||[ref];
   const srcVals=alts[0].m.map(p=>g(p[1]));if(srcVals.some(x=>!x))return;
   for(const alt of alts){const kk=alt.m.map(p=>g(p[1])).join(SEP);if(X.set(alt.s,alt.m.map(p=>p[0])).has(kk))return}
+  // DataFlow edition: a reference that exists in Oracle (e.g. a parent asset loaded earlier) is valid too.
+  let pending=false;
+  if(DF_HOST)for(const alt of alts){const kk=alt.m.map(p=>g(p[1])).join(SEP);const kn=DF_KNOWN.get(alt.s);if(kn&&kn.has(kk))return;
+    const asked=DF_ASKED.get(alt.s);if(!asked||!asked.has(kk)){dfQueueLookup(alt.s,alt.m.map(p=>p[0]),alt.m.map(p=>g(p[1])),kk);pending=true}else if(asked.get(kk)==="?")pending=true}
   const last=srcVals[srcVals.length-1];
   const lbl=ref.label||BYID[alts[0].s].name;
   const orgP=alts[0].m.find(p=>p[0]==="Organization");
   const caseHit=alts.some(alt=>X.setLC(alt.s,alt.m.map(p=>p[0])).has(alt.m.map(p=>g(p[1])).join(SEP).toLowerCase()));
   const vals={};alts[0].m.forEach(p=>vals[p[0]]=g(p[1]));
-  add("e",`"${last}" isn't on ${lbl}${orgP?" for org "+g(orgP[1]):""}${caseHit?" (a match exists with different letter case)":""}`,`${fl.n} not found on ${lbl}`,{s:alts[0].s,v:vals});
+  add("e",`"${last}" isn't on ${lbl}${orgP?" for org "+g(orgP[1]):""}${DF_HOST?(pending?" (checking Oracle…)":" or in Oracle"):""}${caseHit?" (a match exists with different letter case)":""}`,`${fl.n} not found on ${lbl}${DF_HOST?" or in Oracle":""}`,{s:alts[0].s,v:vals});
 }
 
 /* ============ grid ============ */
@@ -1007,6 +1011,21 @@ function dfConfirmRefs(n,total){return new Promise(res=>{let done=false;const fi
 // Standalone edition: DF_HOST is false, the DataFlow buttons are removed at startup and nothing below posts anything.
 const DF_HOST=!!(window.chrome&&window.chrome.webview);
 function dfPost(msg){if(DF_HOST)window.chrome.webview.postMessage(msg)}
+// References found in Oracle (sheet id -> Set of keys), and keys already asked about (key -> "?" pending | "n" not found).
+const DF_KNOWN=new Map(),DF_ASKED=new Map();let dfLookupQ=new Map(),dfLookupT=0,dfLookupErr=false;
+function dfQueueLookup(sid,fields,vals,kk){let a=DF_ASKED.get(sid);if(!a){a=new Map();DF_ASKED.set(sid,a)}a.set(kk,"?");
+  let q=dfLookupQ.get(sid);if(!q){q={fields,rows:new Map()};dfLookupQ.set(sid,q)}q.rows.set(kk,vals);
+  clearTimeout(dfLookupT);dfLookupT=setTimeout(dfFlushLookup,300)}
+function dfFlushLookup(){const q=dfLookupQ;dfLookupQ=new Map();
+  for(const [sid,{fields,rows}] of q){const all=[...rows.values()];
+    for(let i=0;i<all.length;i+=5000){const part=all.slice(i,i+5000);dfPost({type:"lookup-oracle",sheet:BYID[sid].name,headers:fields,rows:part,sourceRows:part.map((_,j)=>j)})}}}
+function dfLookupResult(m){const sh=SHEETS.find(x=>x.name===m.sheet);if(!sh)return;const a=DF_ASKED.get(sh.id)||new Map();
+  if(m.error){for(const [k,v] of a)if(v==="?")a.set(k,"n");
+    if(!dfLookupErr&&!/No DataFlow recipe/.test(m.error)){dfLookupErr=true;toast("Couldn't check references in Oracle: "+m.error)}}
+  else{let kn=DF_KNOWN.get(sh.id);if(!kn){kn=new Set();DF_KNOWN.set(sh.id,kn)}
+    for(const row of m.found||[]){const kk=row.join(SEP);kn.add(kk);a.set(kk,"y")}
+    for(const [k,v] of a)if(v==="?")a.set(k,"n")}
+  validateAll();refresh()}
 function dfRows(sh,pick){const cols=outCols(sh,true),val=(d,[f,i])=>String(outVal(f,S.data[sh.id][d][i]||""));
   return {sheet:sh.name,headers:cols.map(([f])=>f.n),rows:pick.map(d=>cols.map(c=>val(d,c))),sourceRows:pick}}
 // Mark rows Already in Oracle, but only rows that still hold the key DataFlow saw (the sheet may have changed meanwhile).
@@ -1021,6 +1040,7 @@ function dfOnMessage(m){if(!m||typeof m!=="object")return;
   else if(m.type==="check-result"){if(m.error){toast("DataFlow couldn't check Oracle: "+m.error);return}
     const r=dfMark(m.sheet,m.found,m.keys);
     toast(`Checked ${m.checked} row${m.checked===1?"":"s"} in Oracle: ${r.marked} already there${r.marked?" — marked Already in Oracle":""}.`)}
+  else if(m.type==="lookup-result")dfLookupResult(m);
   else if(m.type==="workbook-data")dfWorkbook(m);
   else if(m.type==="workbook-error"){dfReady=false;dfErr=`Couldn't open workbook ${m.name}: ${m.message}. Nothing was changed.`;
     toast(dfErr);$("saved").textContent=dfErr;if(dfWbWait){const f=dfWbWait;dfWbWait=null;f(null)}}
