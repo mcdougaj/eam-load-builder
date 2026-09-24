@@ -251,6 +251,7 @@ button{cursor:pointer}
       <button class="btn sm" id="bClearSheet">Clear sheet</button>
       <span class="sep"></span>
       <button class="btn sm pri" id="bLoadDF" title="Send the selected rows to DataFlow's Load workspace">▶ Load selected</button>
+      <button class="btn sm" id="bUpdateDF" title="Change existing Oracle records with an update recipe">▶ Update selected</button>
       <button class="btn sm" id="bCheckDF" title="Ask DataFlow which rows on this sheet are already in Oracle and mark them Already in Oracle (read-only — nothing is changed in Oracle)">✓ Check Oracle</button>
       <span class="sep"></span>
       <label class="chk"><select id="fView" class="btn sm"><option value="all">All rows</option><option value="issues">Rows with issues</option><option value="errors">Rows with errors</option></select></label>
@@ -1058,10 +1059,13 @@ async function dfCheckOracle(){const sh=BYID[S.active];if(!sh||sh.list){toast("O
   if(!pick.length){toast("Every row on this sheet is already marked Already in Oracle.");return}
   dfPost(Object.assign({type:"check-oracle"},dfRows(sh,pick)));
   toast(`Checking ${pick.length} row${pick.length>1?"s":""} in Oracle…`)}
-async function dfLoadSelected(){const sh=BYID[S.active];if(!sh||sh.list){toast("Open a sheet first.");return}
+// Load selected: create new records (rows marked Already in Oracle are skipped). Update selected: change existing
+// records with an update recipe, so rows marked Already in Oracle are sent too (DataFlow holds back rows not in Oracle).
+const dfLoadSelected=()=>dfSendSelected("create"),dfUpdateSelected=()=>dfSendSelected("update");
+async function dfSendSelected(mode){const upd=mode==="update";const sh=BYID[S.active];if(!sh||sh.list){toast("Open a sheet first.");return}
   const r0=Math.min(sel.r,sel.ar),r1=Math.max(sel.r,sel.ar),pick=[];
-  for(let vr=r0;vr<=r1;vr++){const d=dr(vr);if(d==null||d>=dataRowCount())continue;const row=S.data[sh.id][d];if(isBlank(row)||isFlag(sh,row))continue;pick.push(d)}
-  if(!pick.length){toast("Select the rows to load first. Rows marked Already in Oracle are skipped.");return}
+  for(let vr=r0;vr<=r1;vr++){const d=dr(vr);if(d==null||d>=dataRowCount())continue;const row=S.data[sh.id][d];if(isBlank(row)||(!upd&&isFlag(sh,row)))continue;pick.push(d)}
+  if(!pick.length){toast(upd?"Select the rows to update first.":"Select the rows to load first. Rows marked Already in Oracle are skipped.");return}
   // Errors on linked/list fields only mean "not found on this builder's own sheets or lists" — Oracle validates
   // those itself, and DataFlow's test run shows the result before anything is saved. Anything else (blank
   // required value, bad date/number, too long, duplicate row) Oracle would reject too, so it still blocks.
@@ -1071,13 +1075,14 @@ async function dfLoadSelected(){const sh=BYID[S.active];if(!sh||sh.list){toast("
     (refOnly?soft:hard).push(d)}
   if(hard.length){toast(`${hard.length} selected row${hard.length>1?"s have":" has"} errors Oracle would also reject (blank required value, bad date, too long or duplicate). Fix ${hard.length>1?"them":"it"} first.`);return}
   if(soft.length&&!(await dfConfirmRefs(soft.length,pick.length)))return;
-  dfPost(Object.assign({type:"load-rows"},dfRows(sh,pick)));
-  toast(`Sent ${pick.length} row${pick.length>1?"s":""} to the Load workspace. Run the test there; this sheet updates when rows are in Oracle.`)}
+  dfPost(Object.assign({type:"load-rows",mode},dfRows(sh,pick)));
+  toast(upd?`Sent ${pick.length} row${pick.length>1?"s":""} to the Load workspace to update. Run the test there; rows not in Oracle are held back.`
+           :`Sent ${pick.length} row${pick.length>1?"s":""} to the Load workspace. Run the test there; this sheet updates when rows are in Oracle.`)}
 
 /* toolbar */
 $("bUndo").onclick=undo;
-if(DF_HOST){$("bLoadDF").onclick=dfLoadSelected;$("bCheckDF").onclick=dfCheckOracle}
-else ["bLoadDF","bCheckDF"].forEach(id=>$(id).remove());   // standalone edition: validation only
+if(DF_HOST){$("bLoadDF").onclick=dfLoadSelected;$("bUpdateDF").onclick=dfUpdateSelected;$("bCheckDF").onclick=dfCheckOracle}
+else ["bLoadDF","bUpdateDF","bCheckDF"].forEach(id=>$(id).remove());   // standalone edition: validation only
 $("fView").onchange=e=>{S.view=e.target.value;focusRows=null;hideResult();sel={r:0,c:0,ar:0,ac:0};grid.scrollTop=0;refresh()};
 $("autoclean").onchange=e=>{S.cleanOnEntry=e.target.checked;scheduleSave()};
 $("bDel").onclick=()=>{const r0=Math.min(sel.r,sel.ar),r1=Math.max(sel.r,sel.ar);const del=new Set();for(let vr=r0;vr<=r1;vr++){const d=dr(vr);if(d!=null&&d<dataRowCount())del.add(d)}

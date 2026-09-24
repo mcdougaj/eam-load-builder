@@ -9,6 +9,7 @@ $dom = & $edge --headless=new --disable-gpu --virtual-time-budget=5000 --dump-do
 $fail = @()
 if ($dom -notmatch 'id="bUndo"') { $fail += 'builder toolbar did not render' }
 if ($dom -match 'id="bLoadDF"') { $fail += 'Load selected button is present' }
+if ($dom -match 'id="bUpdateDF"') { $fail += 'Update selected button is present' }
 if ($dom -match 'id="bCheckDF"') { $fail += 'Check Oracle button is present' }
 if ($fail) { $fail | ForEach-Object { Write-Host "FAIL: $_" }; exit 1 }
 Write-Host "PASS: standalone edition renders without DataFlow controls"
