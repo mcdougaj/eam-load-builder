@@ -6,7 +6,9 @@ Author: Joey McDougal, eAM Director
 
 ## Run it
 
-Open `index.html` in Chrome or Edge. No install or server is needed. An internet connection is used for the spreadsheet library and fonts.
+**Online:** https://mcdougaj.github.io/eam-load-builder/ — nothing to install.
+
+Or open `index.html` in Chrome or Edge. No install or server is needed. An internet connection is used for the spreadsheet library and fonts.
 
 ## What it does
 
@@ -22,3 +24,7 @@ Open `index.html` in Chrome or Edge. No install or server is needed. An internet
 ## Data
 
 Files are read and checked in the browser; nothing is uploaded. Work autosaves to the browser only, so export a working workbook to keep a copy. API keys entered in AI settings stay in the browser and are never written to exported files.
+
+## User guide
+
+https://mcdougaj.github.io/eam-load-builder/guide/ — building workbooks, and loading them into Oracle with joeyi DataFlow Pro.
