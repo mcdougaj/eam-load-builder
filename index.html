@@ -284,7 +284,8 @@ button{cursor:pointer}
 <div class="toast" id="toast"></div>
 <input type="file" id="file" accept=".xlsx,.xlsm,.xls,.csv,.txt,.tsv" style="display:none">
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- SheetJS 0.18.5 with cell styles (xlsx-js-style), for formatted exports. DataFlow serves a bundled copy of this URL. -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <script>
 "use strict";
 /* ============ schema (from the Oracle eAM conversion template) ============ */
@@ -309,17 +310,19 @@ const SHEETS=[
 {id:"area",g:"Foundation",name:"Area",nav:"eAM Administrator > Setup > Area",
  fields:[O(),f("Area","t",30,1),f("Description","t",240,1),f("Start Date","d"),f("End Date","d",0,0,{after:"Start Date"})],keys:[["Organization","Area"]]},
 {id:"cat",g:"Foundation",name:"Category",nav:"Setup > Category > Category Codes (Asset Management). Segment1.Segment2 must be unique.",
- fields:[f("Segment1","t",40,1),f("Segment2","t",40,1),f("Description","t",90)],keys:[["Segment1","Segment2"]],
+ fields:[f("Segment1","t",40,1),f("Segment2","t",40,1),f("Description","t",240)],keys:[["Segment1","Segment2"]],
  derive:{"Category Code":g=>g("Segment1")&&g("Segment2")?g("Segment1")+"."+g("Segment2"):""},
  split:{"Category Code":v=>{const i=v.indexOf(".");return i<0?{Segment1:v}:{Segment1:v.slice(0,i),Segment2:v.slice(i+1)}}}},
 {id:"ag",g:"Foundation",name:"Asset Group",nav:"eAM Administrator > Assets > Asset Groups. Template must be a defined item template.",
- fields:[O(),f("Asset Group","t",40,1),f("Description","t",240,1),f("Template Name","t",30,1,{lk:"templates"}),f("Serial Generation","e",10,1,{en:["Predefined","At Receipt"],hint:{"no control":"Asset groups must be serial-controlled in eAM (each asset number is a serial). Use Predefined or At Receipt."}}),f("Starting Prefix","t",30),f("Starting Number","t",30)],keys:[["Organization","Asset Group"]],rule:(g,add)=>{if(g("Serial Generation")==="Predefined")for(const n of ["Starting Prefix","Starting Number"])if(!g(n))add(n,"e",n+" is required when Serial Generation is Predefined",n+" required for Predefined")},
- rule(g,P,X){const o=g("Organization"),a=g("Asset Group");if(o&&a&&!X.set("ca",["Organization","Asset Group"]).has(k(o,a)))P("Asset Group","w","No category assigned to this asset group yet","Asset group has no category assignment")}},
+ fields:[O(),f("Asset Group","t",40,1),f("Description","t",240,1),f("Template Name","t",30,1,{lk:"templates"}),f("Serial Generation","e",10,1,{en:["Predefined","At Receipt"],hint:{"no control":"Asset groups must be serial-controlled in eAM (each asset number is a serial). Use Predefined or At Receipt."}}),f("Starting Prefix","t",30),f("Starting Number","t",30)],keys:[["Organization","Asset Group"]],
+ // One rule: a second "rule" key in this literal would silently replace the first.
+ rule(g,P,X){if(g("Serial Generation")==="Predefined")for(const n of ["Starting Prefix","Starting Number"])if(!g(n))P(n,"e",n+" is required when Serial Generation is Predefined",n+" required for Predefined");
+  const o=g("Organization"),a=g("Asset Group");if(o&&a&&!X.set("ca",["Organization","Asset Group"]).has(k(o,a)))P("Asset Group","w","No category assigned to this asset group yet","Asset group has no category assignment")}},
 {id:"ca",g:"Foundation",name:"Category Assignment",nav:"Setup > Category > Category Sets (Enterprise Asset Management) > Assign",
- fields:[O(),f("Asset Group","t",40,1,{ref:rAG}),f("Category","t",90,1,{ref:rCat("Category")})],
+ fields:[O(),f("Asset Group","t",40,1,{ref:rAG}),f("Category","t",81,1,{ref:rCat("Category")})],
  keys:[["Organization","Asset Group","Category"],{f:["Organization","Asset Group"],sev:"w",msg:"Asset group has more than one category in the EAM set. Valid only if the set allows multiple assignments."}]},
 {id:"an",g:"Foundation",name:"Asset Numbers",nav:"eAM Administrator > Assets > Asset Numbers",
- fields:[f("Asset Number","t",30,1),f("Description","t",240),f("Asset Group","t",40,1,{ref:rAG}),f("Serial Number","t",30,1),f("Asset Category","t",90,0,{ref:rCat("Asset Category")}),O(),f("Owning Department","t",10,0,{lk:"depts"}),f("Area","t",30,0,{ref:rArea}),f("Asset Criticality Code","t",80,0,{lk:"crit"}),f("WIP Accounting Class Code","t",10,0,{lk:"wip"}),f("Maintainable Flag","yn"),f("Operational Flag","yn"),f("Warranty Expiry Date","d"),f("Parent Asset Number","t",30,0,{ref:rAssetOnly("Parent Asset Number")}),f("Location Code","t",60),f("Fixed Asset","t",30),f("Latitude","n",0,0,{min:-90,max:90}),f("Longitude","n",0,0,{min:-180,max:180})],
+ fields:[f("Asset Number","t",30,1),f("Description","t",240),f("Asset Group","t",40,1,{ref:rAG}),f("Serial Number","t",30,1),f("Asset Category","t",81,0,{ref:rCat("Asset Category")}),O(),f("Owning Department","t",10,0,{lk:"depts"}),f("Area","t",30,0,{ref:rArea}),f("Asset Criticality Code","t",80,0,{lk:"crit"}),f("WIP Accounting Class Code","t",10,0,{lk:"wip"}),f("Maintainable Flag","yn"),f("Operational Flag","yn"),f("Warranty Expiry Date","d"),f("Parent Asset Number","t",30,0,{ref:rAssetOnly("Parent Asset Number")}),f("Location Code","t",60),f("Fixed Asset","t",15),f("Latitude","n",0,0,{min:-90,max:90}),f("Longitude","n",0,0,{min:-180,max:180})],
  keys:[["Organization","Asset Number"],{f:["Organization","Asset Group","Serial Number"],msg:"Serial number repeats within this asset group"}],
  rule(g,P,X){const o=g("Organization"),a=g("Asset Group"),c=g("Asset Category");
   if(a&&c&&X.set("ca",["Organization","Asset Group"]).has(k(o,a))&&!X.set("ca",["Organization","Asset Group","Category"]).has(k(o,a,c)))P("Asset Category","w",`Category "${c}" isn't assigned to asset group "${a}" on Category Assignment`,"Asset category not assigned to its asset group",{s:"ca",v:{Organization:o,"Asset Group":a,Category:c}});
@@ -371,20 +374,20 @@ const SHEETS=[
   const req=X.reqCols(grp);for(const col of req){const fld=col[0]+"Attribute"+col.split("ATTRIBUTE")[1];if(!g(fld))P(fld,"e",`Required by attribute group "${grp}"`,"Required attribute is blank")}}},
 {id:"fc",g:"Failure analysis",name:"Failure Codes",nav:"Failure, cause and resolution codes",
  fields:[f("Failure Code","t",80,1),f("Code Type","e",10,1,{en:["Failure","Cause","Resolution"]}),f("Description","t",2000,1),f("Effective End Date","d")],keys:[["Failure Code","Code Type"]]},
-{id:"fs",g:"Failure analysis",name:"Failure Sets",fields:[f("Set Name","t",80,1),f("Description","t",2000),f("Effective End Date","d")],keys:[["Set Name"]]},
+{id:"fs",g:"Failure analysis",name:"Failure Sets",fields:[f("Set Name","t",80,1),f("Description","t",240),f("Effective End Date","d")],keys:[["Set Name"]]},
 {id:"fsa",g:"Failure analysis",name:"Failure Set Associations",nav:"A set can cover several asset groups",
  fields:[f("Set Name","t",80,1,{ref:rFS}),f("Asset Group","t",40,1,{ref:{s:"ag",m:[["Asset Group","Asset Group"]]}}),f("Failure Code Required Flag","yn")],keys:[["Set Name","Asset Group"]]},
 {id:"fcomb",g:"Failure analysis",name:"Failure Combinations",
  fields:[f("Set Name","t",80,1,{ref:rFS}),f("Failure Code","t",80,1),f("Cause Code","t",80,1),f("Resolution Code","t",80,1),f("Effective End Date","d")],keys:[["Set Name","Failure Code","Cause Code","Resolution Code"]],
  rule(g,P,X){const s=X.set("fc",["Failure Code","Code Type"]);for(const [fld,t] of [["Failure Code","Failure"],["Cause Code","Cause"],["Resolution Code","Resolution"]]){const v=g(fld);if(v&&!s.has(k(v,t)))P(fld,"e",`"${v}" isn't on Failure Codes as a ${t} code`,`${fld} not on Failure Codes`,{s:"fc",v:{"Failure Code":v,"Code Type":t}})}}},
 {id:"met",g:"Meters",name:"Meters",
- fields:[f("Name","t",50,1),f("Description","t",240),f("Type","e",8,1,{en:["Absolute","Change"]}),f("UOM","t",30,1,{lk:"uom"}),f("Value Change","e",11,1,{en:["Ascending","Descending","Fluctuating"]}),f("Used In Scheduling","yn"),f("Required","yn"),f("Rate (per day)","n"),f("Number of Past Readings","n"),f("Initial Reading","n"),f("Initial Read Date","d"),f("Effective From","d"),f("Effective To","d",0,0,{after:"Effective From"})],keys:[["Name"]]},
-{id:"mas",g:"Meters",name:"Meter Asset Association",fields:[O(),f("Meter Name","t",50,1,{ref:rMeter("Meter Name")}),f("Asset Number","t",30,1,{ref:rAssetOnly("Asset Number")})],keys:[["Organization","Meter Name","Asset Number"]]},
+ fields:[f("Name","t",80,1),f("Description","t",240),f("Type","e",8,1,{en:["Absolute","Change"]}),f("UOM","t",3,1,{lk:"uom"}),f("Value Change","e",11,1,{en:["Ascending","Descending","Fluctuating"]}),f("Used In Scheduling","yn"),f("Required","yn"),f("Rate (per day)","n"),f("Number of Past Readings","n"),f("Initial Reading","n"),f("Initial Read Date","d"),f("Effective From","d"),f("Effective To","d",0,0,{after:"Effective From"})],keys:[["Name"]]},
+{id:"mas",g:"Meters",name:"Meter Asset Association",fields:[O(),f("Meter Name","t",80,1,{ref:rMeter("Meter Name")}),f("Asset Number","t",30,1,{ref:rAssetOnly("Asset Number")})],keys:[["Organization","Meter Name","Asset Number"]]},
 {id:"mr",g:"Meters",name:"Meter Readings",
- fields:[f("Meter Name","t",50,1,{ref:rMeter("Meter Name")}),f("Date of Reading","dt",0,1),f("Reading Value","n",0,1),f("Reset Flag","yn"),f("Reading Before Reset","n"),f("Reset Comments","t")],keys:[["Meter Name","Date of Reading"]],
+ fields:[f("Meter Name","t",80,1,{ref:rMeter("Meter Name")}),f("Date of Reading","dt",0,1),f("Reading Value","n",0,1),f("Reset Flag","yn"),f("Reading Before Reset","n"),f("Reset Comments","t",2000)],keys:[["Meter Name","Date of Reading"]],
  rule(g,P){if(g("Reset Flag")!=="Y")for(const x of ["Reading Before Reset","Reset Comments"])if(g(x))P(x,"w","Only used when Reset Flag is Y","Reset detail without Reset Flag")}},
 {id:"rt",g:"Routes",name:"Asset Route",nav:"One header row per route. Stops go on Asset Route List.",
- fields:[f("Asset Route Number","t",30,1),f("Route Description","t",240),f("Asset Group","t",40,1,{ref:rAG}),f("Serial Number","t",30,1),f("Asset Category","t",40,0,{ref:rCat("Asset Category")}),O(),f("Owning Department","t",10,0,{lk:"depts"}),f("Area","t",30,0,{ref:rArea}),f("Asset Criticality Code","t",80,0,{lk:"crit"}),f("WIP Accounting Class Code","t",10,0,{lk:"wip"}),f("Maintainable Flag","yn"),f("Operational Flag","yn"),f("Warranty Expiry Date","d")],
+ fields:[f("Asset Route Number","t",30,1),f("Route Description","t",240),f("Asset Group","t",40,1,{ref:rAG}),f("Serial Number","t",30,1),f("Asset Category","t",81,0,{ref:rCat("Asset Category")}),O(),f("Owning Department","t",10,0,{lk:"depts"}),f("Area","t",30,0,{ref:rArea}),f("Asset Criticality Code","t",80,0,{lk:"crit"}),f("WIP Accounting Class Code","t",10,0,{lk:"wip"}),f("Maintainable Flag","yn"),f("Operational Flag","yn"),f("Warranty Expiry Date","d")],
  keys:[{f:["Organization","Asset Route Number"],msg:"Route header repeats. Keep one row per route and list its stops on Asset Route List."},{f:["Organization","Asset Group","Serial Number"],msg:"Serial number repeats within this asset group"}],
  rule(g,P,X){const o=g("Organization"),r=g("Asset Route Number"),ag=g("Asset Group"),sn=g("Serial Number");
   const ar=r&&X.rowsBy("an",["Asset Number"]).get(r);if(ar)P("Asset Route Number","e",`"${r}" is also on Asset Numbers. A route number is an asset number and must be unique`,"Route number also used as an asset number",null,{s:"an",rows:ar});
@@ -408,10 +411,10 @@ const SHEETS=[
  fields:[O(),f("Activity","t",40,1,{ref:rAct("Activity")}),f("Operation Seq","n",0,1,{ref:rOp("Activity","Operation Seq")}),f("Component","t",40,1,{lk:"items"}),f("Quantity","n",0,1,{min:0}),f("From","d"),f("To","d",0,0,{after:"From"})],
  keys:[["Organization","Activity","Operation Seq","Component"]]},
 {id:"aa",g:"Activities",name:"Activity Association",nav:"Asset Number can be an asset or an asset route",
- fields:[O(),f("Template Flag","yn"),f("Asset Number","t",30,1,{ref:rAsset("Asset Number")}),f("Activity","t",40,1,{ref:rAct("Activity")}),f("Start Date","d"),f("End Date","d",0,0,{after:"Start Date"}),f("Priority","t",80,0,{lk:"priority"}),f("Activity Cause","t",80,0,{lk:"act_cause"}),f("Activity Type","t",80,0,{lk:"act_type"}),f("Activity Source","t",80,0,{lk:"act_source"}),f("Shutdown","t",80,0,{lk:"shutdown"}),f("Department","t",10,0,{lk:"depts"}),f("Last Service Start","d"),f("Last Service End","d",0,0,{after:"Last Service Start"}),f("Tagging Required","yn"),f("WIP Class","t",10,0,{lk:"wip"}),f("Planner","t",80,0,{lk:"planners"}),f("Work Order Type","t",80,0,{lk:"wo_type",added:true})],
+ fields:[O(),f("Template Flag","yn"),f("Asset Number","t",30,1,{ref:rAsset("Asset Number")}),f("Activity","t",40,1,{ref:rAct("Activity")}),f("Start Date","d"),f("End Date","d",0,0,{after:"Start Date"}),f("Priority","t",80,0,{lk:"priority"}),f("Activity Cause","t",80,0,{lk:"act_cause"}),f("Activity Type","t",80,0,{lk:"act_type"}),f("Activity Source","t",80,0,{lk:"act_source"}),f("Shutdown","t",80,0,{lk:"shutdown"}),f("Department","t",10,0,{lk:"depts"}),f("Last Service Start","d"),f("Last Service End","d",0,0,{after:"Last Service Start"}),f("Tagging Required","yn"),f("WIP Class","t",10,0,{lk:"wip"}),f("Planner","t",10,0,{lk:"planners"}),f("Work Order Type","t",80,0,{lk:"wo_type",added:true})],
  keys:[["Organization","Asset Number","Activity"]]},
 {id:"pms",g:"Preventive maintenance",name:"PM Schedule",
- fields:[O(),f("Schedule Name","t",50,1),f("Set Name","t",80,1,{def:"MAIN"}),f("Asset Number","t",30,1,{ref:rAsset("Asset Number")}),f("Default","yn"),f("Reschedule Manual WO","yn"),f("Run to Failure","yn"),f("Effective From","d"),f("Effective To","d",0,0,{after:"Effective From"}),f("Lead Time In Days","n",0,0,{min:0}),f("Use Last Service","t",20,1),f("Base Date","d"),f("Last Scheduled Start Date","d"),f("To Suggest Next Service","t",10,1),f("Use Date That Comes","e",10,1,{en:["First","Last"]}),f("Work Order Status","t",10,1,{lk:"wo_status"}),f("Generate Next Work Order","yn"),f("Interval Per Cycle","n",0,0,{min:1}),f("Current Cycle","n",0,0,{min:0}),f("Current Interval Count","n",0,0,{min:0}),f("Planner","t",80,0,{lk:"planners"})],
+ fields:[O(),f("Schedule Name","t",50,1),f("Set Name","t",80,1,{def:"MAIN"}),f("Asset Number","t",30,1,{ref:rAsset("Asset Number")}),f("Default","yn"),f("Reschedule Manual WO","yn"),f("Run to Failure","yn"),f("Effective From","d"),f("Effective To","d",0,0,{after:"Effective From"}),f("Lead Time In Days","n",0,0,{min:0}),f("Use Last Service","t",20,1),f("Base Date","d"),f("Last Scheduled Start Date","d"),f("To Suggest Next Service","t",10,1),f("Use Date That Comes","e",10,1,{en:["First","Last"]}),f("Work Order Status","t",80,1,{lk:"wo_status"}),f("Generate Next Work Order","yn"),f("Interval Per Cycle","n",0,0,{min:1}),f("Current Cycle","n",0,0,{min:0}),f("Current Interval Count","n",0,0,{min:0}),f("Planner","t",10,0,{lk:"planners"})],
  keys:[["Organization","Schedule Name"]],
  rule(g,P,X){const o=g("Organization"),s=g("Schedule Name"),a=g("Asset Number");if(!o||!s)return;const kk=k(o,s);
   if(a&&!X.set("aa",["Organization","Asset Number"]).has(k(o,a)))P("Asset Number","w","Asset has no activities on Activity Association","Asset has no activity association");
@@ -437,7 +440,7 @@ const SHEETS=[
   if(rp&&rp!=="DayofMon"&&!g("Day Of Week"))P("Day Of Week","e",`Repeat ${rp} needs a Day Of Week`,"Repeat without Day Of Week");
   const lr=o&&s&&X.rowsBy("pmd",["Organization","Schedule Name"]).get(k(o,s));if(lr)P("Schedule Name","w","Also has a day interval on PM Day Interval. Keep one.","Schedule on both Day Interval and Calendar",null,{s:"pmd",rows:lr})}},
 {id:"pmr",g:"Preventive maintenance",name:"PM Run Interval",
- fields:[O(),f("Schedule Name","t",50,1,{ref:rSched}),f("Meter Name","t",50,1,{ref:rMeter("Meter Name")}),f("Effective From","d"),f("Effective To","d",0,0,{after:"Effective From"}),f("Run Interval","n",0,1,{gt0:"e"}),f("Last Service Reading","n")],keys:[["Organization","Schedule Name","Meter Name"]]},
+ fields:[O(),f("Schedule Name","t",50,1,{ref:rSched}),f("Meter Name","t",80,1,{ref:rMeter("Meter Name")}),f("Effective From","d"),f("Effective To","d",0,0,{after:"Effective From"}),f("Run Interval","n",0,1,{gt0:"e"}),f("Last Service Reading","n")],keys:[["Organization","Schedule Name","Meter Name"]]},
 {id:"pml",g:"Preventive maintenance",name:"PM Date Lists",fields:[O(),f("Schedule Name","t",50,1,{ref:rSched}),f("List Date","d",0,1),f("List Date Description","t",50)],keys:[["Organization","Schedule Name","List Date"]]},
 {id:"att",g:"Other",name:"Attachments",nav:"Asset Attachments point to an asset; Routing and Operation Attachments point to an activity",
  fields:[O(),f("Asset No/Activity","t",40,1),f("Operation Sequence Number","n"),f("Sequence","n",0,1,{min:1}),f("Category","e",255,1,{en:["Routing Attachments","Operation Attachments","Asset Attachments"]}),f("Title","t",80),f("Description","t",255),f("Data Type","e",10,1,{en:["Short Text","Long Text","Web Page"]}),f("Text","t",32767),f("URL","t",4000)],
@@ -459,7 +462,7 @@ const LK_USES={};LOOKUPS.forEach(l=>LK_USES[l[0]]=[]);
 SHEETS.forEach(sh=>sh.fields.forEach(fl=>{if(fl.lk)LK_USES[fl.lk].push({sid:sh.id,field:fl.n,len:fl.l})}));
 const LISTS=LOOKUPS.map(([key,label,desc])=>{const len=Math.max(3,...LK_USES[key].map(u=>u.len||0));
   const fields=key==="orgs"?[f("Code","t",3,1),f("Description","t",240),f("Active","yn")]:key==="abbr"?[f("Code","t",20,1),f("Description","t",240),f("Active","yn")]:[f("Organization","t",3,0,{lk:"orgs"}),f("Code","t",len,1),f("Description","t",240),f("Active","yn")];
-  return {id:"L_"+key,list:key,g:"Reference lists",name:label,nav:(desc?desc+". ":"")+(key==="orgs"?"":"Leave Organization blank for values valid in every org."),fields,keys:[key==="orgs"||key==="abbr"?["Code"]:["Organization","Code"]]}});
+  return {id:"L_"+key,list:key,g:"Reference lists",name:label,nav:(desc?desc.replace(/\.?$/,". "):"")+(key==="orgs"||key==="abbr"?"":"Leave Organization blank for values valid in every org."),fields,keys:[key==="orgs"||key==="abbr"?["Code"]:["Organization","Code"]]}});
 const LGROUPS=[["Activity and work order codes",["act_type","act_cause","act_source","shutdown","priority","wo_type","wo_status"]],["Organization setup",["orgs","depts","resources","wip","planners"]],["Asset and item codes",["crit","templates","items","uom"]],["Text standards",["abbr"]]];
 LISTS.sort((a,b)=>{const gi=x=>LGROUPS.findIndex(g=>g[1].includes(x.list));const pi=x=>LGROUPS[gi(x)][1].indexOf(x.list);return gi(a)-gi(b)||pi(a)-pi(b)});
 LISTS.forEach(L=>L.lg=LGROUPS.find(g=>g[1].includes(L.list))[0]);
@@ -961,7 +964,7 @@ function listGaps(key){
   return {distinct:distinct.size,gaps:[...gaps.values()].sort((a,b)=>a.v.localeCompare(b.v))};
 }
 function renderRefOverview(){
-  let h="",lg="";
+  let h=DF_HOST?`<div class="lsec">From Oracle<small>DataFlow reads every list's valid codes from Oracle (read-only) and adds the ones missing here.</small></div><div class="lst" style="grid-column:1/-1"><div class="acts"><button class="btn sm pri" id="rfFill">Fill lists from Oracle</button></div></div>`:"",lg="";
   for(const L of LISTS){if(L.lg!==lg){h+=`<div class="lsec">${esc(L.lg)}${lg?"":`<small>Codes that already exist in Oracle. Select a field under "Used by" to jump to it.</small>`}</div>`;lg=L.lg}const key=L.list,LS=LSET[key],G=listGaps(key);const orgs=LS?new Set([].concat(...[...LS.by.values()].map(a=>a.map(x=>x.org).filter(Boolean)))):new Set();
     const uses=LK_USES[key].filter(u=>!BYID[u.sid].list||key!=="orgs");
     const shown=key==="orgs"?uses.filter(u=>!BYID[u.sid].list):uses;
@@ -977,6 +980,7 @@ function renderRefOverview(){
   h+=`<div class="lsec">Already in Oracle<small>Set the last column, "${FLAG}", to Y on any sheet for records that exist in Oracle. They count as valid parents for linked fields, skip load checks except their keys, and stay out of the loader export.</small></div>`;
   h+=`<div class="lst" style="grid-column:1/-1">${fl.length?`<div class="used">${fl.map(sh=>`<button class="chip" data-flag="${sh.id}">${esc(sh.name)}: ${nfmt(V[sh.id].nx)}</button>`).join("")}</div>`:`<div class="st off">No rows marked yet. Typical use: asset groups, categories, assets or activities that are live in Oracle and referenced by the rows you're loading.</div>`}</div>`;
   const el=$("lists");el.innerHTML=h;
+  if($("rfFill"))$("rfFill").onclick=()=>dfFillRefLists();
   el.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>openSheet(b.dataset.go));
   el.querySelectorAll("[data-col]").forEach(b=>b.onclick=()=>{const [sid,fld]=b.dataset.col.split("|");openSheet(sid);const c=BYID[sid].ix[fld];sel={r:0,c,ar:0,ac:c};ensureVisible();paint()});
   el.querySelectorAll("[data-review]").forEach(b=>b.onclick=()=>reviewGaps(b.dataset.review));
@@ -1060,6 +1064,39 @@ function dfMark(sheetName,sourceRows,keys){const sh=SHEETS.find(s=>s.name===shee
   (sourceRows||[]).forEach((d,i)=>{const row=S.data[sh.id][d];if(row&&String(outVal(kf,row[kc]||""))===String((keys||[])[i]))rows.push(d)});
   if(rows.length){snapshot([sh.id],"Mark rows in Oracle");rows.forEach(d=>S.data[sh.id][d][j]="Y");changed()}
   return {marked:rows.length,skipped:(sourceRows||[]).length-rows.length}}
+/* ============ reference lists from Oracle (DataFlow edition) ============ */
+// The organizations this workbook works in: codes on the Organizations list, else the Organization values on the sheets.
+function workbookOrgs(){const s=new Set(),L=BYID.L_orgs;
+  for(const r of S.data.L_orgs)if(!isBlank(r)&&r[L.ix.Code])s.add(String(r[L.ix.Code]).trim().toUpperCase());
+  if(!s.size)for(const sh of SHEETS){const c=sh.ix.Organization;if(c==null)continue;for(const r of S.data[sh.id])if(r[c])s.add(String(r[c]).trim().toUpperCase())}
+  return [...s].filter(o=>/^[A-Z0-9]{1,3}$/.test(o)).sort()}
+let dfRefThen=null;
+// Ask DataFlow for every list's valid codes (read-only in Oracle); then() runs after they're merged (e.g. the blank template export).
+function dfFillRefLists(then){
+  if(!DF_HOST){toast("Reference lists are filled from Oracle in DataFlow's Build page.");return}
+  modal(`<h2>Fill reference lists from Oracle</h2><p>DataFlow reads the valid codes for every list from Oracle and adds the ones this workbook doesn't have yet. It only reads; nothing in Oracle changes, and Undo takes the additions back out.</p>
+  <p><label>Organizations <input id="rfOrgs" class="btn" style="width:240px;text-align:left;cursor:text" value="${esc(workbookOrgs().join(", "))}" placeholder="e.g. FAC"></label></p>
+  <p class="muted">Departments, resources, WIP classes, planners and inventory items are read for these organizations. The other lists are the same in every organization.</p>
+  <div class="row"><button class="btn" data-close>Cancel</button><button class="btn pri" id="rfGo">Fill lists</button></div>`);
+  $("rfGo").onclick=()=>{const orgs=$("rfOrgs").value.split(/[\s,;]+/).map(x=>x.trim().toUpperCase()).filter(Boolean);
+    const bad=orgs.filter(o=>!/^[A-Z0-9]{1,3}$/.test(o));if(bad.length){toast("Not an organization code: "+bad.join(", "));return}
+    if(!orgs.length){toast("Enter at least one organization code, e.g. FAC.");return}
+    closeModal();dfRefThen=then||null;dfPost({type:"ref-lists",orgs});toast("Reading reference lists from Oracle…")}}
+function dfRefListsResult(m){const then=dfRefThen;dfRefThen=null;
+  if(m.error){toast("DataFlow couldn't read the lists: "+m.error);return}
+  const got=m.lists||{};snapshot(LISTS.filter(L=>Array.isArray(got[L.list])).map(L=>L.id),"Fill reference lists from Oracle");
+  let added=0,lists=0;
+  for(const L of LISTS){const codes=got[L.list];if(!Array.isArray(codes))continue;const ix=L.ix,hasOrg=ix.Organization!=null;
+    const seen=new Set(S.data[L.id].filter(r=>!isBlank(r)).map(r=>((hasOrg?r[ix.Organization]||"":"")+SEP+(r[ix.Code]||"")).toUpperCase()));
+    let n=0;for(const c of codes){const code=String(c.code||"").trim();if(!code)continue;const org=hasOrg?String(c.org||"").trim():"";
+      const key=(org+SEP+code).toUpperCase();if(seen.has(key))continue;seen.add(key);
+      const row=new Array(L.fields.length).fill("");if(hasOrg)row[ix.Organization]=org;row[ix.Code]=code;
+      if(ix.Description!=null)row[ix.Description]=String(c.description||"").slice(0,240);if(ix.Active!=null)row[ix.Active]="Y";
+      S.data[L.id].push(row);n++}
+    if(n){added+=n;lists++}}
+  changed();
+  toast(`Added ${nfmt(added)} code${added===1?"":"s"} to ${lists} list${lists===1?"":"s"} from Oracle.${(m.truncated||[]).length?" Some lists stopped at 20,000 codes.":""}`);
+  if(then)then()}
 function dfOnMessage(m){if(!m||typeof m!=="object")return;
   if(m.type==="mark-in-oracle"){const r=dfMark(m.sheet,m.sourceRows,m.keys);
     toast(`${m.message?m.message+". ":""}${r.marked} row${r.marked===1?"":"s"} marked Already in Oracle.${r.skipped?` ${r.skipped} changed here meanwhile — check them.`:""}`)}
@@ -1067,6 +1104,7 @@ function dfOnMessage(m){if(!m||typeof m!=="object")return;
     const r=dfMark(m.sheet,m.found,m.keys);
     toast(`Checked ${m.checked} row${m.checked===1?"":"s"} in Oracle: ${r.marked} already there${r.marked?" — marked Already in Oracle":""}.`)}
   else if(m.type==="lookup-result")dfLookupResult(m);
+  else if(m.type==="ref-lists-result")dfRefListsResult(m);
   else if(m.type==="workbook-data")dfWorkbook(m);
   else if(m.type==="workbook-error"){dfReady=false;dfErr=`Couldn't open workbook ${m.name}: ${m.message}. Nothing was changed.`;
     toast(dfErr);$("saved").textContent=dfErr;if(dfWbWait){const f=dfWbWait;dfWbWait=null;f(null)}}
@@ -1268,6 +1306,126 @@ async function saveFile(name,blob){
   if(downloads){try{await downloads.save({filename:name,data:blob});toast("Saved "+name)}catch(e){if(e&&e.code==="declined")return;toast("Couldn't save: "+((e&&e.message)||e))}return}
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500);
 }
+/* ============ template Comments row ============ */
+// Hand-written notes for the template's Comments row: the conditions the validator checks and where a field sits on the
+// Oracle form. Generated parts (required, defaults, ranges, dates in order) are added by fieldComment.
+const NOTES={
+ area:{Area:"Unique within the organization."},
+ cat:{Segment1:"Category Code = Segment1.Segment2. The pair must be unique.",Segment2:"Second segment of the Category Code."},
+ ag:{"Asset Group":"Give it a category on Category Assignment.","Template Name":"A defined item template (Ref - Item templates).",
+  "Serial Generation":"Asset groups must be serial-controlled: Predefined or At Receipt (No Control is refused).",
+  "Starting Prefix":"Required when Serial Generation is Predefined.","Starting Number":"Required when Serial Generation is Predefined."},
+ ca:{Category:"A Category Code (Segment1.Segment2) from Category.",
+  "Asset Group":"Usually one category per asset group in the Enterprise Asset Management category set."},
+ an:{"Asset Number":"Unique in the organization. Can't also be an Asset Route Number (routes are asset numbers).",
+  "Serial Number":"Unique within the asset group, assets and routes together.",
+  "Asset Category":"Should be the category assigned to the asset group on Category Assignment.",
+  "Parent Asset Number":"Another asset on this sheet (or in Oracle). An asset can't be its own parent."},
+ abom:{"Asset Group":"Item on the Bills of Material form: the asset group the bill belongs to. A group with no bill yet gets one from its first row.",
+  Component:"Line, Main tab: an inventory item.",Quantity:"Line, Main tab.",
+  From:"Serial Effectivity tab: the first asset serial number this component applies to.",
+  To:"Serial Effectivity tab: the last asset serial number. Blank: no end."},
+ attf:{Column:"Each group has at most 20 C_, 10 N_ and 10 D_ columns; one field per column."},
+ attv:{"Attribute Group":"Must be assigned to the asset's asset group on Attribute Assignment."},
+ fcomb:{"Failure Code":"Must be on Failure Codes as a Failure code.","Cause Code":"Must be on Failure Codes as a Cause code.",
+  "Resolution Code":"Must be on Failure Codes as a Resolution code."},
+ mr:{"Reading Before Reset":"Only when Reset Flag is Y.","Reset Comments":"Only when Reset Flag is Y."},
+ rt:{"Asset Route Number":"One row per route. A route is an asset number: unique across organizations and not on Asset Numbers. Its stops go on Asset Route List.",
+  "Serial Number":"Unique within the asset group, assets and routes together."},
+ act:{"Activity Name":"One header row per activity. Its operations go on Activity Operation."},
+ aop:{"Operation Sequence Number":"Give each operation a resource on Activity Resource."},
+ aa:{"Asset Number":"An asset or an asset route."},
+ pms:{"Schedule Name":"Needs a PM Activity row and one interval rule: PM Day Interval, PM Calendar Based, PM Run Interval or PM Date Lists.",
+  "Asset Number":"Should have its activities on Activity Association."},
+ pma:{Activity:"The schedule's asset and this activity must be paired on Activity Association."},
+ pmd:{"Schedule Name":"Use PM Day Interval or PM Calendar Based for a schedule, not both."},
+ pmc:{"Schedule Name":"Use PM Day Interval or PM Calendar Based for a schedule, not both.",
+  Frequency:"Weekly needs Day Of Week; Monthly and Yearly need Repeat; Yearly also needs Month. Daily goes on PM Day Interval.",
+  Repeat:"DayofMon needs Day No; FIRST to LAST need Day Of Week.",
+  "Day No":"With Repeat = DayofMon.","Day Of Week":"With Frequency Weekly, or Repeat FIRST to LAST.","Month":"With Frequency Yearly."},
+ att:{"Asset No/Activity":"If Category is Asset Attachments, the Asset Number. Otherwise the Activity Name.",
+  "Operation Sequence Number":"If Category is Operation Attachments, the activity's operation sequence number (required). Otherwise blank.",
+  Category:"Decides what Asset No/Activity holds.",
+  Text:"Either Text or URL. Short Text: up to 4,000 characters. Short Text and Long Text need Text.",URL:"Web Page needs URL."}
+};
+function fieldComment(sh,fl){
+  if(fl.tool)return "Y = record already exists in Oracle. Not loaded; used as a valid parent.";
+  const out=[],dot=s=>/[.!?]$/.test(s)?s:s+".";
+  if(fl.r)out.push("* Required.");
+  const attr=sh.id==="attv"&&/^([CND])Attribute(\d+)$/.exec(fl.n);
+  const note=(NOTES[sh.id]||{})[fl.n]||(attr?`Value for the field defined on ${attr[1]}_ATTRIBUTE${attr[2]} for this attribute group on Attribute Fields.`:"")
+    ||(fl.n==="Organization"&&!sh.list?"ERP inventory organization code, e.g. FAC.":"");
+  if(note)out.push(dot(note));
+  if(typeof fl.added==="string")out.push(dot(fl.added));
+  if(fl.def)out.push(fl.def.startsWith("=")?`Blank: copies ${fl.def.slice(1)}.`:`Blank: ${fl.def}.`);
+  if(fl.after)out.push(`On or after ${fl.after}.`);
+  if(fl.min!=null&&fl.max!=null)out.push(`${fl.min} to ${fl.max}.`);else if(fl.min!=null)out.push(`${fl.min} or more.`);else if(fl.max!=null)out.push(`${fl.max} or less.`);
+  if(fl.gt0)out.push("More than 0.");
+  return out.join(" ");
+}
+// Rows 1-6 of a template tab: what each column is, as in the Oracle eAM conversion template.
+function templateHeader(sh,cols){return [["Field",...cols.map(([f])=>f.n)],["Oracle Data Type",...cols.map(([f])=>f.tool?"tool only":TLABEL[f.t])],["Format/Length",...cols.map(([f])=>fieldLen(f))],["Oracle required field (Y/N)",...cols.map(([f])=>f.r?"Y":"N")],["Field Validation",...cols.map(([f])=>fieldRule(f))],["Comments",...cols.map(([f])=>fieldComment(sh,f))]]}
+function templateCols(cols){return [{wch:26}].concat(cols.map(([fl])=>({wch:Math.min(Math.max(fl.n.length+2,fl.t==="d"?12:10,16),40)})))}
+/* ============ spreadsheet formatting (xlsx-js-style) ============ */
+// Like the Oracle conversion template: required columns yellow, list-of-values / must-exist columns green.
+const XS=(()=>{const line={style:"thin",color:{rgb:"BFBFBF"}},border={top:line,bottom:line,left:line,right:line};
+  const base={font:{name:"Calibri",sz:10},alignment:{vertical:"top"},border};
+  const m=(...o)=>o.reduce((a,b)=>({...a,...b,font:{...a.font,...(b.font||{})},alignment:{...a.alignment,...(b.alignment||{})}}),base);
+  return {
+    label:m({font:{bold:true,color:{rgb:"404040"}},fill:{fgColor:{rgb:"D9D9D9"}}}),
+    name:m({font:{bold:true,color:{rgb:"FFFFFF"}},fill:{fgColor:{rgb:"1F4E78"}},alignment:{wrapText:true,vertical:"center"}}),
+    nameReq:m({font:{bold:true,color:{rgb:"000000"}},fill:{fgColor:{rgb:"FFFF00"}},alignment:{wrapText:true,vertical:"center"}}),
+    meta:m({fill:{fgColor:{rgb:"F2F2F2"}},alignment:{horizontal:"center"}}),
+    metaReq:m({fill:{fgColor:{rgb:"FFFF00"}},alignment:{horizontal:"center"}}),
+    rule:m({fill:{fgColor:{rgb:"F2F2F2"}},alignment:{wrapText:true}}),
+    ruleList:m({font:{color:{rgb:"006100"}},fill:{fgColor:{rgb:"C6EFCE"}},alignment:{wrapText:true}}),
+    note:m({font:{sz:9},fill:{fgColor:{rgb:"FFFFFF"}},alignment:{wrapText:true}}),
+    tool:m({font:{italic:true,color:{rgb:"595959"}},fill:{fgColor:{rgb:"EDEDED"}},alignment:{wrapText:true}}),
+    head:m({font:{bold:true,color:{rgb:"FFFFFF"}},fill:{fgColor:{rgb:"1F4E78"}}}),
+    cell:m({alignment:{wrapText:true}}),
+    title:{font:{name:"Calibri",sz:16,bold:true,color:{rgb:"1F4E78"}}},
+    section:{font:{name:"Calibri",sz:12,bold:true,color:{rgb:"1F4E78"}}},
+    text:{font:{name:"Calibri",sz:10}}}})();
+function setStyle(ws,r,c,s){const a=XLSX.utils.encode_cell({r,c});if(!ws[a])ws[a]={t:"s",v:""};ws[a].s=s}
+// Rows 1-6 of a template tab: label column, column names, data type / length / required, rules, notes.
+function styleTemplateTab(ws,cols,widths){
+  for(let r=0;r<6;r++)setStyle(ws,r,0,XS.label);
+  cols.forEach(([fl],i)=>{const c=i+1,req=fl.r,listy=fl.tool?false:!!(fl.lk||fl.ref||fl.t==="e"||fl.t==="yn");
+    setStyle(ws,0,c,fl.tool?XS.tool:req?XS.nameReq:XS.name);
+    for(const r of [1,2,3])setStyle(ws,r,c,fl.tool?XS.tool:req?XS.metaReq:XS.meta);
+    setStyle(ws,4,c,fl.tool?XS.tool:listy?XS.ruleList:XS.rule);
+    setStyle(ws,5,c,fl.tool?XS.tool:XS.note)});
+  // Taller rows where the rules and notes wrap (about 1.15 x the column width in characters per line).
+  const lines=(row)=>Math.max(1,...cols.map(([fl],i)=>{const w=(widths[i+1]||{wch:16}).wch,v=String((ws[XLSX.utils.encode_cell({r:row,c:i+1})]||{}).v||"");return Math.ceil(v.length/Math.max(8,w*1.15))}));
+  ws["!rows"]=[{hpt:Math.min(45,15*Math.max(1,...cols.map(([fl],i)=>Math.ceil(fl.n.length/Math.max(8,(widths[i+1]||{wch:16}).wch)))))},{},{},{},
+    {hpt:Math.min(90,13*lines(4))},{hpt:Math.min(160,12*lines(5))}]}
+function styleHeaderRow(ws,n){for(let c=0;c<n;c++)setStyle(ws,0,c,XS.head)}
+// Blank template: every sheet in load order with its header rows and no data, the reference-list tabs, and a Read me.
+// Filled in and brought back with Import, it lands column for column (same names as the builder and DataFlow's recipes).
+function exportBlankTemplate(){
+  if(!window.XLSX){toast("The spreadsheet writer didn't load. Check your connection.");return}
+  const wb=XLSX.utils.book_new();
+  const rm=[["eAM conversion template"],["From the eAM load builder, "+new Date().toLocaleDateString()],[],
+    ["How to use"],
+    ["1. Sheet tabs: fill from row 7, column B on, and leave column A blank. \"Ref - \" tabs have one header row: fill from row 2, column A."],
+    ["2. Work in load order (below): later sheets refer to earlier ones, e.g. an asset needs its Asset Group."],
+    ["3. Bring the file back with Import in the eAM load builder or DataFlow's Build page. Every row is checked as it lands."],
+    ["4. Rows 1 to 6 describe each column: its name, Oracle data type, length or format, whether Oracle requires it (* in Comments too), the allowed values or the sheet it must exist on, and notes."],
+    ["5. \"Ref - \" tabs hold your valid Oracle codes (DataFlow can fill them from Oracle). A filled list has those columns checked; an empty one skips that check."],
+    ["6. Already in Oracle = Y marks a row that's already in Oracle: it counts as a valid parent and isn't loaded."],
+    [],["Load order"],["No.","Group","Sheet","Where in Oracle","Columns","Required columns"],
+    ...SHEETS.map(sh=>[sh.no,sh.g,sh.name,sh.nav||"",sh.fields.filter(f=>!f.tool).length,sh.fields.filter(f=>f.r).map(f=>f.n).join(", ")]),
+    [],["Reference lists"],["","","Tab","Used for"],...LISTS.map(L=>["","",("Ref - "+L.name).slice(0,31),(L.nav||"").trim()])];
+  const rws=XLSX.utils.aoa_to_sheet(rm);rws["!cols"]=[{wch:8},{wch:22},{wch:26},{wch:70},{wch:9},{wch:60}];
+  // Read me: title, section headings, and the two tables (header row + bordered, wrapped cells).
+  let table=0;rm.forEach((row,r)=>{const a=row[0];
+    if(r===0)setStyle(rws,r,0,XS.title);else if(a==="How to use"||a==="Load order"||a==="Reference lists"){setStyle(rws,r,0,XS.section);table=a==="How to use"?0:-1}
+    else if(table===-1){row.forEach((v,c)=>{if(v!=="")setStyle(rws,r,c,XS.head)});table=1}else if(table===1&&row.length)row.forEach((v,c)=>{if(c>=row.findIndex(x=>x!==""))setStyle(rws,r,c,XS.cell)});else if(row.length===0)table=0;else setStyle(rws,r,0,XS.text)});
+  XLSX.utils.book_append_sheet(wb,rws,"Read me");
+  for(const sh of SHEETS){const cols=outCols(sh,false);const ws=XLSX.utils.aoa_to_sheet(templateHeader(sh,cols));ws["!cols"]=templateCols(cols);styleTemplateTab(ws,cols,ws["!cols"]);XLSX.utils.book_append_sheet(wb,ws,sh.name.slice(0,31))}
+  for(const L of LISTS){const ws=XLSX.utils.aoa_to_sheet([L.fields.map(f=>f.n)].concat(rowsFor(L,false,false).map(([r])=>r.map(v=>v||""))));ws["!cols"]=L.fields.map(f=>({wch:Math.max(12,Math.min(f.l||12,40))}));styleHeaderRow(ws,L.fields.length);XLSX.utils.book_append_sheet(wb,ws,("Ref - "+L.name).slice(0,31))}
+  saveFile("eAM_template_"+stamp()+".xlsx",new Blob([XLSX.write(wb,{bookType:"xlsx",type:"array"})],{type:"application/octet-stream"}));
+}
 const TLABEL={t:"varchar2",e:"varchar2",yn:"varchar2",n:"number",d:"date",dt:"date"};
 function fieldLen(fl){return fl.t==="d"?"mm/dd/yyyy":fl.t==="dt"?"mm/dd/yyyy hh:mm":fl.t==="yn"?1:fl.l||""}
 function fieldRule(fl){if(fl.tool)return "Y/N, tool only";if(fl.t==="yn")return "Y/N";if(fl.t==="e")return fl.en.join(", ");if(fl.ref)return "Must exist on "+(fl.ref.label||BYID[(fl.ref.any||[fl.ref])[0].s].name);if(fl.lk)return "LOV: "+LKLABEL[fl.lk];return ""}
@@ -1279,9 +1437,11 @@ $("bExport").onclick=()=>{
   <label class="opt"><input type="radio" name="ex" value="load"><span>Loader workbook<small>Only rows to load, one header row per sheet. No "${FLAG}" column, no marked rows, no list tabs.</small></span></label>
   <label class="opt"><input type="radio" name="ex" value="csv"><span>CSV of the open sheet, loader form<small>${!BYID[S.active]?"Open a sheet first.":esc(cur().name)}</small></span></label>
   <label class="opt"><input type="radio" name="ex" value="iss"><span>Issue log<small>Every error and warning with sheet, row, field and message.</small></span></label>
+  <label class="opt"><input type="radio" name="ex" value="blank"${tot+tx?"":" checked"}><span>Blank template (to get started)<small>Every sheet in load order with its column rules and notes, no data, plus a Read me. The "Ref - " tabs carry this workbook's reference lists. Fill it in and bring it back with Import.</small></span></label>
+  ${DF_HOST?`<label class="opt"><input type="checkbox" id="exRef"><span>Fill the reference lists from Oracle first<small>Blank template only. DataFlow reads the valid codes from Oracle, adds the missing ones, then exports.</small></span></label>`:""}
   <label class="opt"><input type="checkbox" id="exClean"><span>Leave out rows that still have errors<small>Loader workbook and CSV only. Warnings stay in.</small></span></label>
   <div class="row"><button class="btn" data-close>Cancel</button><button class="btn pri" id="doExp">Export</button></div>`);
-  $("doExp").onclick=()=>{const m=document.querySelector('input[name="ex"]:checked').value;const x=$("exClean").checked;closeModal();doExport(m,x)};
+  $("doExp").onclick=()=>{const m=document.querySelector('input[name="ex"]:checked').value;const x=$("exClean").checked;const ref=$("exRef")&&$("exRef").checked;closeModal();if(m==="blank"&&ref)dfFillRefLists(exportBlankTemplate);else if(m==="blank")exportBlankTemplate();else doExport(m,x)};
 };
 function stamp(){const d=new Date();return d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())}
 function outCols(sh,loader){return sh.fields.map((fl,i)=>[fl,i]).filter(([fl])=>!(loader&&fl.tool))}
@@ -1299,13 +1459,13 @@ function doExport(mode,excl){
     saveFile("eAM_issue_log_"+stamp()+".xlsx",new Blob([XLSX.write(wb,{bookType:"xlsx",type:"array"})],{type:"application/octet-stream"}));return}
   const loader=mode==="load";
   for(const sh of SHEETS){const rows=rowsFor(sh,loader,excl);if(!rows.length)continue;const cols=outCols(sh,loader);let aoa;
-    if(!loader){aoa=[["Field",...cols.map(([f])=>f.n)],["Oracle Data Type",...cols.map(([f])=>f.tool?"tool only":TLABEL[f.t])],["Format/Length",...cols.map(([f])=>fieldLen(f))],["Oracle required field (Y/N)",...cols.map(([f])=>f.r?"Y":"N")],["Field Validation",...cols.map(([f])=>fieldRule(f))],["Comments",...cols.map(([f])=>f.tool?"Y = record already exists in Oracle. Not loaded; used as a valid parent.":"")]];
-      rows.forEach(([r])=>aoa.push(["",...cols.map(([f,i])=>outVal(f,r[i]||""))]))}
+    if(!loader){aoa=templateHeader(sh,cols);rows.forEach(([r])=>aoa.push(["",...cols.map(([f,i])=>outVal(f,r[i]||""))]))}
     else{aoa=[cols.map(([f])=>f.n)];rows.forEach(([r])=>aoa.push(cols.map(([f,i])=>outVal(f,r[i]||""))))}
-    count+=rows.length;const ws=XLSX.utils.aoa_to_sheet(aoa);ws["!cols"]=(loader?[]:[{wch:26}]).concat(cols.map(([fl])=>({wch:Math.min(Math.max(fl.n.length+2,fl.t==="d"?12:10),40)})));
+    count+=rows.length;const ws=XLSX.utils.aoa_to_sheet(aoa);ws["!cols"]=loader?templateCols(cols).slice(1):templateCols(cols);
+    if(loader)styleHeaderRow(ws,cols.length);else styleTemplateTab(ws,cols,ws["!cols"]);
     XLSX.utils.book_append_sheet(wb,ws,sh.name.slice(0,31))}
   if(!loader)for(const L of LISTS){const rows=rowsFor(L,false,false);if(!rows.length)continue;const aoa=[L.fields.map(f=>f.n)].concat(rows.map(([r])=>r.map(v=>v||"")));
-    count+=rows.length;const ws=XLSX.utils.aoa_to_sheet(aoa);ws["!cols"]=L.fields.map(f=>({wch:Math.max(12,Math.min(f.l||12,40))}));XLSX.utils.book_append_sheet(wb,ws,("Ref - "+L.name).slice(0,31))}
+    count+=rows.length;const ws=XLSX.utils.aoa_to_sheet(aoa);ws["!cols"]=L.fields.map(f=>({wch:Math.max(12,Math.min(f.l||12,40))}));styleHeaderRow(ws,L.fields.length);XLSX.utils.book_append_sheet(wb,ws,("Ref - "+L.name).slice(0,31))}
   if(!loader&&count){const T=S.textRules;const ws=XLSX.utils.aoa_to_sheet([["Setting","Value"],["Code case",T.codeCase==="upper"?"UPPERCASE":"As typed"],["Flag repeated words",T.flagRepeat?"Y":"N"],["Flag all-capital descriptions",T.flagAllCaps?"Y":"N"],["Clean on entry",S.cleanOnEntry?"Y":"N"]]);ws["!cols"]=[{wch:32},{wch:14}];XLSX.utils.book_append_sheet(wb,ws,"Tool settings")}
   if(!count){toast("Nothing to export yet");return}
   saveFile("eAM_"+(loader?"loader_":"working_")+stamp()+".xlsx",new Blob([XLSX.write(wb,{bookType:"xlsx",type:"array"})],{type:"application/octet-stream"}));
