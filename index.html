@@ -313,6 +313,9 @@ const SHEETS=[
  fields:[f("Segment1","t",40,1),f("Segment2","t",40,1),f("Description","t",240)],keys:[["Segment1","Segment2"]],
  derive:{"Category Code":g=>g("Segment1")&&g("Segment2")?g("Segment1")+"."+g("Segment2"):""},
  split:{"Category Code":v=>{const i=v.indexOf(".");return i<0?{Segment1:v}:{Segment1:v.slice(0,i),Segment2:v.slice(i+1)}}}},
+{id:"cs",g:"Foundation",name:"Category Set",nav:"Setup > Category > Category Sets: query the set, then add the category to Enforce List of Valid Categories. Category Assignment can't use a category until it's on the set's list (APP-INV-05180).",
+ fields:[f("Category Set","t",30,1,{def:"Enterprise Asset Management"}),f("Category","t",81,1,{ref:rCat("Category")})],
+ keys:[["Category Set","Category"]]},
 {id:"ag",g:"Foundation",name:"Asset Group",nav:"eAM Administrator > Assets > Asset Groups. Template must be a defined item template.",
  fields:[O(),f("Asset Group","t",40,1),f("Description","t",240,1),f("Template Name","t",30,1,{lk:"templates",def:"@Asset Group"}),f("Serial Generation","e",10,1,{en:["Predefined","At Receipt"],hint:{"no control":"Asset groups must be serial-controlled in eAM (each asset number is a serial). Use Predefined or At Receipt."}}),f("Starting Prefix","t",30),f("Starting Number","t",30)],keys:[["Organization","Asset Group"]],
  // One rule: a second "rule" key in this literal would silently replace the first.
@@ -1322,6 +1325,7 @@ const IFC="MTL_EAM_ASSET_NUM_INTERFACE.";
 const ORA={
  area:{Organization:ORG,Area:"MTL_EAM_LOCATIONS.LOCATION_CODES",Description:"MTL_EAM_LOCATIONS.DESCRIPTION","Start Date":"MTL_EAM_LOCATIONS.START_DATE","End Date":"MTL_EAM_LOCATIONS.END_DATE"},
  cat:{Segment1:"MTL_CATEGORIES_B.SEGMENT1",Segment2:"MTL_CATEGORIES_B.SEGMENT2",Description:"MTL_CATEGORIES_TL.DESCRIPTION"},
+ cs:{"Category Set":"MTL_CATEGORY_SETS_TL.CATEGORY_SET_NAME","Category":"MTL_CATEGORY_SET_VALID_CATS.CATEGORY_ID (via Segment1.Segment2)"},
  ag:{Organization:ORG,"Asset Group":"MTL_SYSTEM_ITEMS_B.SEGMENT1 (EAM_ITEM_TYPE 1)",Description:"MTL_SYSTEM_ITEMS_TL.DESCRIPTION","Template Name":"MTL_ITEM_TEMPLATES_B.TEMPLATE_NAME",
   "Serial Generation":"MTL_SYSTEM_ITEMS_B.SERIAL_NUMBER_CONTROL_CODE (lookup MTL_SERIAL_NUMBER)","Starting Prefix":"MTL_SYSTEM_ITEMS_B.AUTO_SERIAL_ALPHA_PREFIX","Starting Number":"MTL_SYSTEM_ITEMS_B.START_AUTO_SERIAL_NUMBER"},
  ca:{Organization:ORG,"Asset Group":"MTL_ITEM_CATEGORIES.INVENTORY_ITEM_ID (via asset group)",Category:"MTL_ITEM_CATEGORIES.CATEGORY_ID (via Segment1.Segment2)"},
@@ -1405,6 +1409,7 @@ const ORA={
 const NOTES={
  area:{Area:"Unique within the organization."},
  cat:{Segment1:"Category Code = Segment1.Segment2. The pair must be unique.",Segment2:"Second segment of the Category Code."},
+ cs:{"Category Set":"The category set whose list of valid categories gets the category. eAM uses Enterprise Asset Management.","Category":"A Category Code (Segment1.Segment2) from Category. Every category Category Assignment uses must be on its set's list first."},
  ag:{"Asset Group":"Give it a category on Category Assignment.","Template Name":"A defined item template (Ref - Item templates).",
   "Serial Generation":"Asset groups must be serial-controlled: Predefined or At Receipt (No Control is refused).",
   "Starting Prefix":"Required when Serial Generation is Predefined.","Starting Number":"Required when Serial Generation is Predefined."},
