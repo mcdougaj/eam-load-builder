@@ -217,7 +217,8 @@ button{cursor:pointer}
 .lst .acts{display:flex;gap:6px;flex-wrap:wrap}
 .rv{max-height:48vh;overflow:auto;border:1px solid var(--line2);margin:8px 0}
 .rv table{margin:0}
-@media (max-width:1100px){.wrap{grid-template-columns:220px minmax(0,1fr)}.issues{display:none}.wrap.showiss .issues{display:block;position:absolute;right:0;top:0;bottom:0;width:320px;z-index:20;box-shadow:-2px 0 0 var(--line)}}
+#bIss{display:none}
+@media (max-width:1100px){#bIss{display:inline-block}.wrap{grid-template-columns:220px minmax(0,1fr)}.issues{display:none}.wrap.showiss .issues{display:block;position:absolute;right:0;top:0;bottom:0;width:320px;z-index:20;box-shadow:-2px 0 0 var(--line)}}
 @media (max-width:760px){.wrap{grid-template-columns:minmax(0,1fr)}.rail{display:none}.mobsel{display:block;margin:0 18px 8px}.top{flex-wrap:wrap}.brand small{display:none}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -232,7 +233,7 @@ button{cursor:pointer}
   <button class="btn" id="bAI" title="AI provider and key">AI settings</button>
   <button class="btn" id="bImport">Import</button>
   <button class="btn pri" id="bExport">Export</button>
-  <button class="btn" id="bIss" title="Show issues panel" style="display:none">Issues</button>
+  <button class="btn" id="bIss" title="Show issues panel">Issues</button>
 </header>
 <div class="wrap" id="wrap">
   <nav class="rail" id="rail" aria-label="Sheets in load order"></nav>
@@ -328,7 +329,25 @@ const SHEETS=[
   if(an){const orgs=X.multi("an",["Asset Number"],"Organization").get(an);if(orgs&&orgs.size>1)P("Asset Number","w",`Also used in org ${[...orgs].filter(x=>x!==o).slice(0,3).join(", ")}. Confirm your instance allows the same asset number in two orgs`,"Asset number used in more than one org",null,{s:"an",rows:X.rowsBy("an",["Asset Number"]).get(an).filter(i=>(S.data.an[i][BYID.an.ix.Organization]||"")!==o)})}
   const sr=a&&sn&&X.rowsBy("rt",["Organization","Asset Group","Serial Number"]).get(k(o,a,sn));if(sr)P("Serial Number","e",`Serial "${sn}" is also used by a route in asset group "${a}"`,"Serial number shared with a route in the same asset group",null,{s:"rt",rows:sr})}},
 {id:"abom",g:"Foundation",name:"Asset BOM",nav:"Asset group bill of material",
- fields:[O(),f("Asset Group","t",40,1,{ref:rAG}),f("Component","t",40,1,{lk:"items"}),f("Quantity","n",0,1,{min:0}),f("From","t",30,1),f("To","t",30)],keys:[["Organization","Asset Group","Component"]]},
+ // Columns in the Bills of Material form's entry order: header Item + Alternate, then the line (Main tab), then Serial Effectivity.
+ fields:[O(),f("Asset Group","t",40,1,{ref:rAG}),
+  f("Alternate","t",10,0,{added:"Alternate bill designator. Blank: the primary bill"}),
+  f("Item Seq","n",0,0,{min:1,added:"Item Seq on the Bills of Material form. Blank: Oracle numbers lines 10, 20, 30"}),
+  f("Operation Seq","n",0,0,{min:1,def:"1",added:"Operation Seq on the Bills of Material form. Asset BOMs have no routing, so this is 1"}),
+  f("Component","t",40,1,{lk:"items"}),
+  f("Basis","e",4,0,{en:["Item","Lot"],def:"Item",added:"Basis on the Bills of Material form"}),
+  f("Quantity","n",0,1,{min:0}),
+  f("Inverse Usage","n",0,0,{gt0:"e",added:"Inverse Usage on the Bills of Material form: 1 ÷ Quantity. Oracle keeps only Quantity"}),
+  f("From","t",30,1),f("To","t",30)],
+ // Earlier column orders, for workbooks saved before the save recorded column names (matched by row length).
+ layouts:[["Organization","Asset Group","Component","Quantity","From","To","Already in Oracle"],
+  ["Organization","Asset Group","Component","Quantity","From","To","Item Seq","Operation Seq","Basis","Alternate","Already in Oracle"]],
+ keys:[["Organization","Asset Group","Alternate","Component","From"]],
+ rule(g,P,X){const o=g("Organization"),a=g("Asset Group"),alt=g("Alternate"),s=g("Item Seq");
+  const rr=s&&X.rowsBy("abom",["Organization","Asset Group","Alternate","Item Seq"]).get(k(o,a,alt,s));
+  if(rr&&rr.length>1)P("Item Seq","e",`Item Seq ${s} is used more than once on the ${alt?alt+" ":""}bill for "${a}"`,"Item Seq repeats within a bill",null,{s:"abom",rows:rr});
+  const q=g("Quantity"),iu=g("Inverse Usage");
+  if(isNum(q)&&isNum(iu)&&+q>0&&+iu>0&&Math.abs(+q*+iu-1)>0.0001)P("Inverse Usage","e",`Inverse Usage must be 1 ÷ Quantity (${+(1/+q).toFixed(6)}). The form recalculates Quantity from it`,"Inverse Usage isn't 1 ÷ Quantity")}},
 {id:"attg",g:"Attributes",name:"Attribute Group",nav:"Setup > Flexfields > Descriptive > Segments (Inventory, Asset Attributes)",
  fields:[f("Attribute Group","t",30,1),f("Name","t",80,1,{def:"=Attribute Group"}),f("Description","t",240)],keys:[["Attribute Group"]]},
 {id:"attf",g:"Attributes",name:"Attribute Fields",nav:"Asset Attributes > Segments. Max 20 character, 10 numeric, 10 date columns per group.",
@@ -627,7 +646,7 @@ function colWidth(fl){let w;if(fl.t==="d")w=100;else if(fl.t==="dt")w=132;else i
 function layout(){const sh=cur();colX=[];colW=[];let x=RNW;sh.fields.forEach(fl=>{colX.push(x);const w=colWidth(fl);colW.push(w);x+=w});totalW=x}
 function typeLabel(fl){if(fl.t==="d")return "Date";if(fl.t==="dt")return "Date + time";if(fl.t==="yn")return "Y / N";if(fl.t==="n")return "Number";if(fl.t==="e")return "List";if(fl.tool)return "Y = skip load";if(fl.ref)return "Text "+fl.l+", linked";if(fl.lk)return "Text "+fl.l+", list";return fl.l?"Text "+fl.l:"Text"}
 function renderHead(){const sh=cur();let h=`<div class="hc rn" style="width:${RNW}px"></div>`;
-  sh.fields.forEach((fl,c)=>{h+=`<div class="hc" style="width:${colW[c]}px" title="${esc(fl.n+(fl.r?" (required)":"")+(fl.tool?"\nY marks a record that already exists in Oracle: it counts as a valid parent, skips load checks and stays out of the load export":"")+(fl.lk?"\nChecked against the "+LKLABEL[fl.lk]+" list":"")+(fl.added?"\nNot in the original template: added from Oracle's activity association work order defaults":"")+(fl.ref?"\nMust exist on "+(fl.ref.label||BYID[(fl.ref.any||[fl.ref])[0].s].name):""))}"><div class="hn">${fl.r?'<span class="req">* </span>':""}${esc(fl.n)}${fl.added?' <span class="muted" style="font-weight:400">(added)</span>':""}</div><div class="hm">${typeLabel(fl)}</div></div>`});
+  sh.fields.forEach((fl,c)=>{h+=`<div class="hc" style="width:${colW[c]}px" title="${esc(fl.n+(fl.r?" (required)":"")+(fl.tool?"\nY marks a record that already exists in Oracle: it counts as a valid parent, skips load checks and stays out of the load export":"")+(fl.lk?"\nChecked against the "+LKLABEL[fl.lk]+" list":"")+(fl.added?"\nNot in the original template: "+(typeof fl.added==="string"?fl.added:"added from Oracle's activity association work order defaults"):"")+(fl.ref?"\nMust exist on "+(fl.ref.label||BYID[(fl.ref.any||[fl.ref])[0].s].name):""))}"><div class="hn">${fl.r?'<span class="req">* </span>':""}${esc(fl.n)}${fl.added?' <span class="muted" style="font-weight:400">(added)</span>':""}</div><div class="hm">${typeLabel(fl)}</div></div>`});
   headEl.innerHTML=h;headEl.style.width=totalW+"px"}
 function dataRowCount(){return S.data[S.active].length}
 function viewCount(){return viewRows?viewRows.length:dataRowCount()+SPARE}
@@ -1103,7 +1122,7 @@ $("bDel").onclick=()=>{const r0=Math.min(sel.r,sel.ar),r1=Math.max(sel.r,sel.ar)
   if(focusRows){focusRows=null;hideResult()}
   sel.ar=sel.r=Math.min(r0,Math.max(0,viewCount()-1));changed();toast(`Deleted ${nfmt(del.size)} row${del.size===1?"":"s"}`)};
 $("bClean").onclick=()=>cleanSheet(S.active,true);
-$("bIss").onclick=()=>$("wrap").classList.toggle("showiss");
+$("bIss").onclick=()=>{const w=$("wrap");w.classList.remove("chatting");w.classList.toggle("showiss")};
 
 
 $("bRules").onclick=()=>{const T=S.textRules;const na=(S.data.L_abbr||[]).filter(r=>!isBlank(r)).length;
@@ -1303,9 +1322,15 @@ let tt=0;function toast(msg,act,actLabel){const t=$("toast");t.innerHTML=esc(msg
 let db=null,st=0;
 function idb(){return new Promise(res=>{try{const r=indexedDB.open("eam-load-builder",1);r.onupgradeneeded=()=>r.result.createObjectStore("s");r.onsuccess=()=>res(r.result);r.onerror=()=>res(null)}catch(e){res(null)}})}
 function scheduleSave(){clearTimeout(st);st=setTimeout(save,900)}
-function stateObj(){return {data:S.data,active:S.active,clean:S.cleanOnEntry,textRules:S.textRules,v:2}}
+function stateObj(){return {data:S.data,cols:Object.fromEntries(ALL.map(s=>[s.id,s.fields.map(fl=>fl.n)])),active:S.active,clean:S.cleanOnEntry,textRules:S.textRules,v:2}}
+// Where each saved cell goes: by the column names saved with the workbook (state.cols); for older saves, by a sheet's
+// earlier layout of that row length, or (rows one short per "added" column) by the layout without the added columns.
+// null = same positions as now. Cells of a column that no longer exists are dropped.
+function savedCols(s,len,v){const names=(v.cols&&v.cols[s.id])||(s.layouts||[]).find(l=>l.length===len);
+  if(Array.isArray(names)&&names.length===len)return names.map(n=>s.ix[n]);
+  const old=s.fields.filter(fl=>!fl.added);if(old.length===s.fields.length||len!==old.length)return null;return old.map(fl=>s.fields.indexOf(fl))}
 function applyState(v){if(!v||!v.data)return false;
-  for(const s of ALL){const rows=v.data[s.id];if(Array.isArray(rows))S.data[s.id]=rows.map(row=>{const a=new Array(s.fields.length).fill("");row.forEach((x,i)=>{if(i<a.length)a[i]=x==null?"":String(x)});return a})}
+  for(const s of ALL){const rows=v.data[s.id];if(Array.isArray(rows))S.data[s.id]=rows.map(row=>{const a=new Array(s.fields.length).fill("");const at=savedCols(s,row.length,v);row.forEach((x,i)=>{const c=at?at[i]:i;if(c!=null&&c<a.length)a[c]=x==null?"":String(x)});return a})}
   if(v.lists)migrateLists(v.lists);if(v.active&&(BYID[v.active]||v.active==="_lists"||v.active==="_summary"))S.active=v.active;
   if(typeof v.clean==="boolean")S.cleanOnEntry=v.clean;if(v.textRules)S.textRules=Object.assign(S.textRules,v.textRules);return true}
 // DataFlow edition: workbooks are files DataFlow owns. WB_NAME is the open workbook; dfWbWait resolves the startup request.
@@ -1551,7 +1576,6 @@ $("chatBox").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.p
 /* ============ boot ============ */
 (async function(){
   await load();if(DF_HOST)dfPostSchemas();$("autoclean").checked=S.cleanOnEntry;
-  if(matchMedia("(max-width:1100px)").matches)$("bIss").style.display="inline-block";
   validateAll();openSheet(S.active);
 })();
 </script>
