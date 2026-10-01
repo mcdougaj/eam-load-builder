@@ -1233,7 +1233,7 @@ function cellText(cell){if(!cell||cell.v==null)return "";
     if(cell.w&&/^0\d+$/.test(cell.w))return cell.w;return String(Number(cell.v.toPrecision(15)))}
   if(cell.t==="d"){const d=cell.v;return mdY(d.getFullYear(),d.getMonth()+1,d.getDate())}
   if(cell.t==="b")return cell.v?"TRUE":"FALSE";if(cell.t==="e")return "";return String(cell.v)}
-const META=new Set(["field","oracledatatype","formatlength","oraclerequiredfieldyn","fieldvalidation","comments","javaformsnavigation"]);
+const META=new Set(["field","oracledatatype","formatlength","oraclerequiredfieldyn","fieldvalidation","comments","oraclecolumn","javaformsnavigation"]);
 const MAPROW=/siteid|default to|leave blank|^"[^"]*"$|to_char\(/i;
 // SQL column references in template mapping rows (cii.instance_number, msi.segment1). Case-sensitive, and the
 // column part must carry "_" or a digit, so real dotted codes such as Vehicle.PickUp Truck don't match.
@@ -1315,6 +1315,90 @@ async function saveFile(name,blob){
   if(downloads){try{await downloads.save({filename:name,data:blob});toast("Saved "+name)}catch(e){if(e&&e.code==="declined")return;toast("Couldn't save: "+((e&&e.message)||e))}return}
   const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500);
 }
+// Where each column lands in Oracle (checked against Vision 12.2.9 ALL_TAB_COLUMNS, 2026-10-01). "via" = Oracle stores an id
+// looked up from the value; "lookup" = the form takes the lookup meaning. Blank where no single column fits.
+const ORG="MTL_PARAMETERS.ORGANIZATION_CODE";
+const IFC="MTL_EAM_ASSET_NUM_INTERFACE.";
+const ORA={
+ area:{Organization:ORG,Area:"MTL_EAM_LOCATIONS.LOCATION_CODES",Description:"MTL_EAM_LOCATIONS.DESCRIPTION","Start Date":"MTL_EAM_LOCATIONS.START_DATE","End Date":"MTL_EAM_LOCATIONS.END_DATE"},
+ cat:{Segment1:"MTL_CATEGORIES_B.SEGMENT1",Segment2:"MTL_CATEGORIES_B.SEGMENT2",Description:"MTL_CATEGORIES_TL.DESCRIPTION"},
+ ag:{Organization:ORG,"Asset Group":"MTL_SYSTEM_ITEMS_B.SEGMENT1 (EAM_ITEM_TYPE 1)",Description:"MTL_SYSTEM_ITEMS_TL.DESCRIPTION","Template Name":"MTL_ITEM_TEMPLATES_B.TEMPLATE_NAME",
+  "Serial Generation":"MTL_SYSTEM_ITEMS_B.SERIAL_NUMBER_CONTROL_CODE (lookup MTL_SERIAL_NUMBER)","Starting Prefix":"MTL_SYSTEM_ITEMS_B.AUTO_SERIAL_ALPHA_PREFIX","Starting Number":"MTL_SYSTEM_ITEMS_B.START_AUTO_SERIAL_NUMBER"},
+ ca:{Organization:ORG,"Asset Group":"MTL_ITEM_CATEGORIES.INVENTORY_ITEM_ID (via asset group)",Category:"MTL_ITEM_CATEGORIES.CATEGORY_ID (via Segment1.Segment2)"},
+ an:{"Asset Number":IFC+"INSTANCE_NUMBER",Description:IFC+"DESCRIPTIVE_TEXT","Asset Group":IFC+"INVENTORY_ITEM_ID (via asset group)","Serial Number":IFC+"SERIAL_NUMBER",
+  "Asset Category":IFC+"CATEGORY_ID (via category code)",Organization:IFC+"ORGANIZATION_CODE","Owning Department":IFC+"OWNING_DEPARTMENT_CODE",Area:IFC+"LOCATION_CODES",
+  "Asset Criticality Code":IFC+"ASSET_CRITICALITY_CODE (lookup MTL_EAM_ASSET_CRITICALITY)","WIP Accounting Class Code":IFC+"WIP_ACCOUNTING_CLASS_CODE","Maintainable Flag":IFC+"MAINTAINABLE_FLAG",
+  "Operational Flag":IFC+"OPERATIONAL_LOG_FLAG","Warranty Expiry Date":IFC+"SUPPLIER_WARRANTY_EXP_DATE","Parent Asset Number":IFC+"PARENT_INSTANCE_NUMBER","Fixed Asset":IFC+"FA_ASSET_NUMBER"},
+ abom:{Organization:ORG,"Asset Group":"BOM_STRUCTURES_B.ASSEMBLY_ITEM_ID (via asset group)",Alternate:"BOM_STRUCTURES_B.ALTERNATE_BOM_DESIGNATOR","Item Seq":"BOM_COMPONENTS_B.ITEM_NUM",
+  "Operation Seq":"BOM_COMPONENTS_B.OPERATION_SEQ_NUM",Component:"BOM_COMPONENTS_B.COMPONENT_ITEM_ID (via item)",Basis:"BOM_COMPONENTS_B.BASIS_TYPE (lookup BOM_BASIS_TYPE)",
+  Quantity:"BOM_COMPONENTS_B.COMPONENT_QUANTITY","Inverse Usage":"Not stored: 1 / BOM_COMPONENTS_B.COMPONENT_QUANTITY",From:"BOM_COMPONENTS_B.FROM_END_ITEM_UNIT_NUMBER",To:"BOM_COMPONENTS_B.TO_END_ITEM_UNIT_NUMBER"},
+ attg:{"Attribute Group":"FND_DESCR_FLEX_CONTEXTS.DESCRIPTIVE_FLEX_CONTEXT_CODE",Name:"FND_DESCR_FLEX_CONTEXTS_TL.DESCRIPTIVE_FLEX_CONTEXT_NAME",Description:"FND_DESCR_FLEX_CONTEXTS_TL.DESCRIPTION"},
+ attf:{"Attribute Group":"FND_DESCR_FLEX_COLUMN_USAGES.DESCRIPTIVE_FLEX_CONTEXT_CODE","Field Name":"FND_DESCR_FLEX_COLUMN_USAGES.END_USER_COLUMN_NAME",Prompt:"FND_DESCR_FLEX_COL_USAGE_TL.FORM_LEFT_PROMPT",
+  Column:"FND_DESCR_FLEX_COLUMN_USAGES.APPLICATION_COLUMN_NAME",Length:"FND_DESCR_FLEX_COLUMN_USAGES.DISPLAY_SIZE",Required:"FND_DESCR_FLEX_COLUMN_USAGES.REQUIRED_FLAG"},
+ atta:{Organization:"MTL_EAM_ASSET_ATTR_GROUPS.ORGANIZATION_ID (via code)","Asset Group":"MTL_EAM_ASSET_ATTR_GROUPS.INVENTORY_ITEM_ID (via asset group)","Attribute Group":"MTL_EAM_ASSET_ATTR_GROUPS.DESCRIPTIVE_FLEX_CONTEXT_CODE"},
+ attv:{Organization:ORG,"Asset Number":"MTL_EAM_ASSET_ATTR_VALUES.MAINTENANCE_OBJECT_ID (via asset)","Attribute Group":"MTL_EAM_ASSET_ATTR_VALUES.ATTRIBUTE_CATEGORY"},
+ fc:{"Failure Code":"EAM_FAILURE_CODES.FAILURE_CODE, EAM_CAUSE_CODES.CAUSE_CODE or EAM_RESOLUTION_CODES.RESOLUTION_CODE","Code Type":"Picks the table: failure, cause or resolution codes",
+  Description:"<code table>.DESCRIPTION","Effective End Date":"<code table>.EFFECTIVE_END_DATE"},
+ fs:{"Set Name":"EAM_FAILURE_SETS.SET_NAME",Description:"EAM_FAILURE_SETS.DESCRIPTION","Effective End Date":"EAM_FAILURE_SETS.EFFECTIVE_END_DATE"},
+ fsa:{"Set Name":"EAM_FAILURE_SET_ASSOCIATIONS.SET_ID (via set name)","Asset Group":"EAM_FAILURE_SET_ASSOCIATIONS.INVENTORY_ITEM_ID (via asset group)","Failure Code Required Flag":"EAM_FAILURE_SET_ASSOCIATIONS.FAILURE_CODE_REQUIRED"},
+ fcomb:{"Set Name":"EAM_FAILURE_COMBINATIONS.SET_ID (via set name)","Failure Code":"EAM_FAILURE_COMBINATIONS.FAILURE_CODE","Cause Code":"EAM_FAILURE_COMBINATIONS.CAUSE_CODE",
+  "Resolution Code":"EAM_FAILURE_COMBINATIONS.RESOLUTION_CODE","Effective End Date":"EAM_FAILURE_COMBINATIONS.EFFECTIVE_END_DATE"},
+ met:{Name:"CSI_COUNTERS_TL.NAME",Description:"CSI_COUNTERS_TL.DESCRIPTION",Type:"CSI_COUNTERS_B.READING_TYPE (lookup CSI_COUNTER_READING_TYPE)",UOM:"CSI_COUNTERS_B.UOM_CODE",
+  "Value Change":"CSI_COUNTERS_B.DIRECTION (lookup CSI_COUNTER_DIRECTION_TYPE)","Used In Scheduling":"CSI_COUNTERS_B.USED_IN_SCHEDULING",Required:"CSI_COUNTERS_B.EAM_REQUIRED_FLAG",
+  "Rate (per day)":"CSI_COUNTERS_B.DEFAULT_USAGE_RATE","Number of Past Readings":"CSI_COUNTERS_B.USE_PAST_READING","Initial Reading":"CSI_COUNTERS_B.INITIAL_READING",
+  "Initial Read Date":"CSI_COUNTERS_B.INITIAL_READING_DATE","Effective From":"CSI_COUNTERS_B.START_DATE_ACTIVE","Effective To":"CSI_COUNTERS_B.END_DATE_ACTIVE"},
+ mas:{Organization:"CSI_COUNTER_ASSOCIATIONS.MAINT_ORGANIZATION_ID (via code)","Meter Name":"CSI_COUNTER_ASSOCIATIONS.COUNTER_ID (via meter name)","Asset Number":"CSI_COUNTER_ASSOCIATIONS.SOURCE_OBJECT_ID (via asset)"},
+ mr:{"Meter Name":"CSI_COUNTER_READINGS.COUNTER_ID (via meter name)","Date of Reading":"CSI_COUNTER_READINGS.VALUE_TIMESTAMP","Reading Value":"CSI_COUNTER_READINGS.COUNTER_READING",
+  "Reset Flag":"CSI_COUNTER_READINGS.RESET_MODE","Reset Comments":"CSI_COUNTER_READINGS.RESET_REASON"},
+ rt:{"Asset Route Number":IFC+"INSTANCE_NUMBER (NETWORK_ASSET_FLAG Y)","Route Description":IFC+"DESCRIPTIVE_TEXT","Asset Group":IFC+"INVENTORY_ITEM_ID (via asset group)","Serial Number":IFC+"SERIAL_NUMBER",
+  "Asset Category":IFC+"CATEGORY_ID (via category code)",Organization:IFC+"ORGANIZATION_CODE","Owning Department":IFC+"OWNING_DEPARTMENT_CODE",Area:IFC+"LOCATION_CODES",
+  "Asset Criticality Code":IFC+"ASSET_CRITICALITY_CODE (lookup MTL_EAM_ASSET_CRITICALITY)","WIP Accounting Class Code":IFC+"WIP_ACCOUNTING_CLASS_CODE","Maintainable Flag":IFC+"MAINTAINABLE_FLAG",
+  "Operational Flag":IFC+"OPERATIONAL_LOG_FLAG","Warranty Expiry Date":IFC+"SUPPLIER_WARRANTY_EXP_DATE"},
+ rl:{Organization:"MTL_EAM_NETWORK_ASSETS.ORGANIZATION_ID (via code)","Route Asset Number":"MTL_EAM_NETWORK_ASSETS.NETWORK_OBJECT_ID (via route)","Asset Number":"MTL_EAM_NETWORK_ASSETS.MAINTENANCE_OBJECT_ID (via asset)",
+  "Effective From Date":"MTL_EAM_NETWORK_ASSETS.START_DATE_ACTIVE","Effective To Date":"MTL_EAM_NETWORK_ASSETS.END_DATE_ACTIVE"},
+ act:{Organization:ORG,"Activity Name":"MTL_SYSTEM_ITEMS_B.SEGMENT1 (EAM_ITEM_TYPE 2)",Description:"MTL_SYSTEM_ITEMS_TL.DESCRIPTION","Template Name":"MTL_ITEM_TEMPLATES_B.TEMPLATE_NAME",
+  "Activity Type":"MTL_SYSTEM_ITEMS_B.EAM_ACTIVITY_TYPE_CODE (lookup MTL_EAM_ACTIVITY_TYPE)",Shutdown:"MTL_SYSTEM_ITEMS_B.EAM_ACT_SHUTDOWN_STATUS (lookup BOM_EAM_SHUTDOWN_TYPE)",
+  "Activity Cause":"MTL_SYSTEM_ITEMS_B.EAM_ACTIVITY_CAUSE_CODE (lookup MTL_EAM_ACTIVITY_CAUSE)","Activity Source":"MTL_SYSTEM_ITEMS_B.EAM_ACTIVITY_SOURCE_CODE (lookup MTL_EAM_ACTIVITY_SOURCE)",
+  Notification:"MTL_SYSTEM_ITEMS_B.EAM_ACT_NOTIFICATION_FLAG"},
+ aop:{Organization:ORG,"Activity Name":"BOM_OPERATIONAL_ROUTINGS.ASSEMBLY_ITEM_ID (via activity)","Operation Sequence Number":"BOM_OPERATION_SEQUENCES.OPERATION_SEQ_NUM",
+  Setname:"BOM_OPERATION_SEQUENCES.STANDARD_OPERATION_ID (via standard operation)",Department:"BOM_OPERATION_SEQUENCES.DEPARTMENT_ID (via department code)",
+  Description:"BOM_OPERATION_SEQUENCES.OPERATION_DESCRIPTION","Long Description":"BOM_OPERATION_SEQUENCES.LONG_DESCRIPTION"},
+ ares:{Organization:ORG,"Activity Name":"BOM_OPERATIONAL_ROUTINGS.ASSEMBLY_ITEM_ID (via activity)","Operation Sequence Number":"BOM_OPERATION_SEQUENCES.OPERATION_SEQ_NUM",
+  "Resource Sequence Number":"BOM_OPERATION_RESOURCES.RESOURCE_SEQ_NUM","Resource Code":"BOM_OPERATION_RESOURCES.RESOURCE_ID (via resource code)",Basis:"BOM_OPERATION_RESOURCES.BASIS_TYPE (lookup BOM_BASIS_TYPE)",
+  "Assigned Units":"BOM_OPERATION_RESOURCES.ASSIGNED_UNITS",Usage:"BOM_OPERATION_RESOURCES.USAGE_RATE_OR_AMOUNT"},
+ actbom:{Organization:ORG,Activity:"BOM_STRUCTURES_B.ASSEMBLY_ITEM_ID (via activity)","Operation Seq":"BOM_COMPONENTS_B.OPERATION_SEQ_NUM",Component:"BOM_COMPONENTS_B.COMPONENT_ITEM_ID (via item)",
+  Quantity:"BOM_COMPONENTS_B.COMPONENT_QUANTITY",From:"BOM_COMPONENTS_B.EFFECTIVITY_DATE",To:"BOM_COMPONENTS_B.DISABLE_DATE"},
+ aa:{Organization:"MTL_EAM_ASSET_ACTIVITIES.ORGANIZATION_ID (via code)","Template Flag":"MTL_EAM_ASSET_ACTIVITIES.TMPL_FLAG","Asset Number":"MTL_EAM_ASSET_ACTIVITIES.MAINTENANCE_OBJECT_ID (via asset or route)",
+  Activity:"MTL_EAM_ASSET_ACTIVITIES.ASSET_ACTIVITY_ID (via activity)","Start Date":"MTL_EAM_ASSET_ACTIVITIES.START_DATE_ACTIVE","End Date":"MTL_EAM_ASSET_ACTIVITIES.END_DATE_ACTIVE",
+  Priority:"MTL_EAM_ASSET_ACTIVITIES.PRIORITY_CODE (lookup WIP_EAM_ACTIVITY_PRIORITY)","Activity Cause":"MTL_EAM_ASSET_ACTIVITIES.ACTIVITY_CAUSE_CODE (lookup MTL_EAM_ACTIVITY_CAUSE)",
+  "Activity Type":"MTL_EAM_ASSET_ACTIVITIES.ACTIVITY_TYPE_CODE (lookup MTL_EAM_ACTIVITY_TYPE)","Activity Source":"MTL_EAM_ASSET_ACTIVITIES.ACTIVITY_SOURCE_CODE (lookup MTL_EAM_ACTIVITY_SOURCE)",
+  Shutdown:"MTL_EAM_ASSET_ACTIVITIES.SHUTDOWN_TYPE_CODE (lookup BOM_EAM_SHUTDOWN_TYPE)",Department:"MTL_EAM_ASSET_ACTIVITIES.OWNING_DEPARTMENT_ID (via department code)",
+  "Last Service Start":"MTL_EAM_ASSET_ACTIVITIES.LAST_SERVICE_START_DATE","Last Service End":"MTL_EAM_ASSET_ACTIVITIES.LAST_SERVICE_END_DATE",
+  "Tagging Required":"MTL_EAM_ASSET_ACTIVITIES.TAGGING_REQUIRED_FLAG","WIP Class":"MTL_EAM_ASSET_ACTIVITIES.CLASS_CODE",Planner:"EAM_ORG_MAINT_DEFAULTS.PLANNER_MAINTENANCE",
+  "Work Order Type":"EAM_ORG_MAINT_DEFAULTS.WORK_ORDER_TYPE (lookup WIP_EAM_WORK_ORDER_TYPE)"},
+ pms:{Organization:ORG,"Schedule Name":"EAM_PM_SCHEDULINGS.NAME","Set Name":"EAM_PM_SCHEDULINGS.SET_NAME_ID (via EAM_PM_SET_NAMES.SET_NAME)",
+  "Asset Number":"EAM_PM_SCHEDULINGS.MAINTENANCE_OBJECT_ID (via asset or route)",Default:"EAM_PM_SCHEDULINGS.DEFAULT_IMPLEMENT","Reschedule Manual WO":"EAM_PM_SCHEDULINGS.INCLUDE_MANUAL",
+  "Run to Failure":"EAM_PM_SCHEDULINGS.NON_SCHEDULED_FLAG","Effective From":"EAM_PM_SCHEDULINGS.FROM_EFFECTIVE_DATE","Effective To":"EAM_PM_SCHEDULINGS.TO_EFFECTIVE_DATE",
+  "Lead Time In Days":"EAM_PM_SCHEDULINGS.LEAD_TIME","Last Scheduled Start Date":"MTL_EAM_ASSET_ACTIVITIES.LAST_SCHEDULED_START_DATE","Use Last Service":"EAM_PM_SCHEDULINGS.RESCHEDULING_POINT","Base Date":"EAM_PM_SCHEDULINGS.BASE_DATE",
+  "To Suggest Next Service":"EAM_PM_SCHEDULINGS.SCHEDULING_METHOD_CODE","Use Date That Comes":"EAM_PM_SCHEDULINGS.WHICHEVER_FIRST","Work Order Status":"EAM_PM_SCHEDULINGS.GENERATE_WO_STATUS (via status)",
+  "Generate Next Work Order":"EAM_PM_SCHEDULINGS.GENERATE_NEXT_WORK_ORDER","Interval Per Cycle":"EAM_PM_SCHEDULINGS.INTERVAL_PER_CYCLE","Current Cycle":"EAM_PM_SCHEDULINGS.CURRENT_CYCLE",
+  "Current Interval Count":"EAM_PM_SCHEDULINGS.CURRENT_SEQ",Planner:"EAM_PM_SCHEDULINGS.PLANNER_MAINTENANCE"},
+ pma:{Organization:ORG,"Schedule Name":"EAM_PM_ACTIVITIES.PM_SCHEDULE_ID (via schedule)",Activity:"EAM_PM_ACTIVITIES.ACTIVITY_ASSOCIATION_ID (via asset + activity)",
+  "Multiple Interval":"EAM_PM_ACTIVITIES.INTERVAL_MULTIPLE","Repeat in Cycle":"EAM_PM_ACTIVITIES.ALLOW_REPEAT_IN_CYCLE",Tolerance:"EAM_PM_ACTIVITIES.DAY_TOLERANCE"},
+ pmd:{Organization:ORG,"Schedule Name":"EAM_PM_SCHEDULING_RULES.PM_SCHEDULE_ID (via schedule; day interval rule)","Effective From":"EAM_PM_SCHEDULING_RULES.EFFECTIVE_DATE_FROM",
+  "Effective To":"EAM_PM_SCHEDULING_RULES.EFFECTIVE_DATE_TO","Day Interval":"EAM_PM_SCHEDULING_RULES.DAY_INTERVAL"},
+ pmc:{Organization:ORG,"Schedule Name":"EAM_PM_SCHEDULING_RULES.PM_SCHEDULE_ID (via schedule; calendar rule)","Effective From":"EAM_PM_SCHEDULING_RULES.EFFECTIVE_DATE_FROM",
+  "Effective To":"EAM_PM_SCHEDULING_RULES.EFFECTIVE_DATE_TO",Frequency:"EAM_PM_SCHEDULING_RULES.FREQUENCY",Interval:"EAM_PM_SCHEDULING_RULES.CALENDAR_INTERVAL",
+  Repeat:"EAM_PM_SCHEDULING_RULES.REPEAT","Day No":"EAM_PM_SCHEDULING_RULES.DAYNO","Month":"EAM_PM_SCHEDULING_RULES.MONTHOFYEAR"},
+ pmr:{Organization:ORG,"Schedule Name":"EAM_PM_SCHEDULING_RULES.PM_SCHEDULE_ID (via schedule; runtime rule)","Meter Name":"EAM_PM_SCHEDULING_RULES.METER_ID (via meter name)",
+  "Effective From":"EAM_PM_SCHEDULING_RULES.EFFECTIVE_DATE_FROM","Effective To":"EAM_PM_SCHEDULING_RULES.EFFECTIVE_DATE_TO","Run Interval":"EAM_PM_SCHEDULING_RULES.RUNTIME_INTERVAL",
+  "Last Service Reading":"EAM_PM_SCHEDULING_RULES.LAST_SERVICE_READING"},
+ pml:{Organization:ORG,"Schedule Name":"EAM_PM_SCHEDULING_RULES.PM_SCHEDULE_ID (via schedule; date list rule)","List Date":"EAM_PM_SCHEDULING_RULES.LIST_DATE",
+  "List Date Description":"EAM_PM_SCHEDULING_RULES.LIST_DATE_DESC"},
+ att:{Organization:ORG,"Asset No/Activity":"FND_ATTACHED_DOCUMENTS.PK1..PK5_VALUE (via asset or activity; ENTITY_NAME from Category)",
+  "Operation Sequence Number":"FND_ATTACHED_DOCUMENTS.PK1..PK5_VALUE (the operation)",Sequence:"FND_ATTACHED_DOCUMENTS.SEQ_NUM",
+  Category:"FND_DOCUMENTS.CATEGORY_ID (via FND_DOCUMENT_CATEGORIES_TL.USER_NAME)",Title:"FND_DOCUMENTS_TL.TITLE",Description:"FND_DOCUMENTS_TL.DESCRIPTION",
+  "Data Type":"FND_DOCUMENTS.DATATYPE_ID (via FND_DOCUMENT_DATATYPES.USER_NAME)",Text:"FND_DOCUMENTS_SHORT_TEXT.SHORT_TEXT or FND_DOCUMENTS_LONG_TEXT.LONG_TEXT",URL:"FND_DOCUMENTS.URL"}};
 /* ============ template Comments row ============ */
 // Hand-written notes for the template's Comments row: the conditions the validator checks and where a field sits on the
 // Oracle form. Generated parts (required, defaults, ranges, dates in order) are added by fieldComment.
@@ -1345,8 +1429,15 @@ const NOTES={
  aop:{"Operation Sequence Number":"Give each operation a resource on Activity Resource."},
  aa:{"Asset Number":"An asset or an asset route."},
  pms:{"Schedule Name":"Needs a PM Activity row and one interval rule: PM Day Interval, PM Calendar Based, PM Run Interval or PM Date Lists.",
-  "Asset Number":"Should have its activities on Activity Association."},
- pma:{Activity:"The schedule's asset and this activity must be paired on Activity Association."},
+  "Asset Number":"Should have its activities on Activity Association.",
+  // From Oracle's own column descriptions (FND_COLUMNS), where they add to the field name.
+  "To Suggest Next Service":"Scheduling method: Forward or Backward.","Base Date":"The date the PM engine generates work orders from.",
+  "Use Date That Comes":"Whichever rule date comes first, or last.","Reschedule Manual WO":"Whether manually created work orders are rescheduled too.",
+  "Interval Per Cycle":"How many intervals the cycle is divided into.","Current Cycle":"The cycle the schedule is in now.",
+  "Current Interval Count":"Position within the current cycle; used to resequence work orders."},
+ pma:{Activity:"The schedule's asset and this activity must be paired on Activity Association.",
+  "Multiple Interval":"Which interval of the cycle the activity falls on.","Repeat in Cycle":"Whether the activity can repeat within the cycle.",
+  Tolerance:"Days the activity can be delayed; used when suppressing overlapping work orders."},
  pmd:{"Schedule Name":"Use PM Day Interval or PM Calendar Based for a schedule, not both."},
  pmc:{"Schedule Name":"Use PM Day Interval or PM Calendar Based for a schedule, not both.",
   Frequency:"Weekly needs Day Of Week; Monthly and Yearly need Repeat; Yearly also needs Month. Daily goes on PM Day Interval.",
@@ -1374,8 +1465,10 @@ function fieldComment(sh,fl){
   if(fl.gt0)out.push("More than 0.");
   return out.join(" ");
 }
-// Rows 1-6 of a template tab: what each column is, as in the Oracle eAM conversion template.
-function templateHeader(sh,cols){return [["Field",...cols.map(([f])=>f.n)],["Oracle Data Type",...cols.map(([f])=>f.tool?"tool only":TLABEL[f.t])],["Format/Length",...cols.map(([f])=>fieldLen(f))],["Oracle required field (Y/N)",...cols.map(([f])=>f.r?"Y":"N")],["Field Validation",...cols.map(([f])=>fieldRule(f))],["Comments",...cols.map(([f])=>fieldComment(sh,f))]]}
+// Rows 1-7 of a template tab: what each column is, as in the Oracle eAM conversion template.
+function templateHeader(sh,cols){return [["Field",...cols.map(([f])=>f.n)],["Oracle Data Type",...cols.map(([f])=>f.tool?"tool only":TLABEL[f.t])],["Format/Length",...cols.map(([f])=>fieldLen(f))],["Oracle required field (Y/N)",...cols.map(([f])=>f.r?"Y":"N")],["Field Validation",...cols.map(([f])=>fieldRule(f))],["Comments",...cols.map(([f])=>fieldComment(sh,f))],["Oracle column",...cols.map(([f])=>oracleColumn(sh,f))]]}
+// Row 7: where the column lands in Oracle (ORA); list columns name their source table/lookup.
+function oracleColumn(sh,fl){if(fl.tool)return "Builder only";if(sh.list)return fl.n==="Code"?sh.src:fl.n==="Organization"?ORG:"";const m=sh.id==="attv"&&/^([CND])Attribute(\d+)$/.exec(fl.n);return (ORA[sh.id]||{})[fl.n]||(m?"MTL_EAM_ASSET_ATTR_VALUES."+m[1]+"_ATTRIBUTE"+m[2]:"")}
 function templateCols(cols){return [{wch:26}].concat(cols.map(([fl])=>({wch:Math.min(Math.max(fl.n.length+2,fl.t==="d"?12:10,16),40)})))}
 /* ============ spreadsheet formatting (xlsx-js-style) ============ */
 // Like the Oracle conversion template: required columns yellow, list-of-values / must-exist columns green.
@@ -1391,6 +1484,7 @@ const XS=(()=>{const line={style:"thin",color:{rgb:"BFBFBF"}},border={top:line,b
     rule:m({fill:{fgColor:{rgb:"F2F2F2"}},alignment:{wrapText:true}}),
     ruleList:m({font:{color:{rgb:"006100"}},fill:{fgColor:{rgb:"C6EFCE"}},alignment:{wrapText:true}}),
     note:m({font:{sz:9},fill:{fgColor:{rgb:"FFFFFF"}},alignment:{wrapText:true}}),
+    ora:m({font:{sz:9,color:{rgb:"1F4E78"}},fill:{fgColor:{rgb:"EAF1F8"}},alignment:{wrapText:true}}),
     tool:m({font:{italic:true,color:{rgb:"595959"}},fill:{fgColor:{rgb:"EDEDED"}},alignment:{wrapText:true}}),
     head:m({font:{bold:true,color:{rgb:"FFFFFF"}},fill:{fgColor:{rgb:"1F4E78"}}}),
     cell:m({alignment:{wrapText:true}}),
@@ -1398,20 +1492,20 @@ const XS=(()=>{const line={style:"thin",color:{rgb:"BFBFBF"}},border={top:line,b
     section:{font:{name:"Calibri",sz:12,bold:true,color:{rgb:"1F4E78"}}},
     text:{font:{name:"Calibri",sz:10}}}})();
 function setStyle(ws,r,c,s){const a=XLSX.utils.encode_cell({r,c});if(!ws[a])ws[a]={t:"s",v:""};ws[a].s=s}
-// Rows 1-6 of a template tab: label column, column names, data type / length / required, rules, notes.
+// Rows 1-7 of a template tab: label column, column names, data type / length / required, rules, notes.
 function styleTemplateTab(ws,cols,widths){
-  for(let r=0;r<6;r++)setStyle(ws,r,0,XS.label);
+  for(let r=0;r<7;r++)setStyle(ws,r,0,XS.label);
   cols.forEach(([fl],i)=>{const c=i+1,req=fl.r,listy=fl.tool?false:!!(fl.lk||fl.ref||fl.t==="e"||fl.t==="yn");
     setStyle(ws,0,c,fl.tool?XS.tool:req?XS.nameReq:XS.name);
     for(const r of [1,2,3])setStyle(ws,r,c,fl.tool?XS.tool:req?XS.metaReq:XS.meta);
     setStyle(ws,4,c,fl.tool?XS.tool:listy?XS.ruleList:XS.rule);
-    setStyle(ws,5,c,fl.tool?XS.tool:XS.note)});
+    setStyle(ws,5,c,fl.tool?XS.tool:XS.note);setStyle(ws,6,c,fl.tool?XS.tool:XS.ora)});
   // Taller rows where the rules and notes wrap (about 1.15 x the column width in characters per line).
   const lines=(row)=>Math.max(1,...cols.map(([fl],i)=>{const w=(widths[i+1]||{wch:16}).wch,v=String((ws[XLSX.utils.encode_cell({r:row,c:i+1})]||{}).v||"");return Math.ceil(v.length/Math.max(8,w*1.15))}));
   ws["!rows"]=[{hpt:Math.min(45,15*Math.max(1,...cols.map(([fl],i)=>Math.ceil(fl.n.length/Math.max(8,(widths[i+1]||{wch:16}).wch)))))},{},{},{},
-    {hpt:Math.min(90,13*lines(4))},{hpt:Math.min(160,12*lines(5))}]}
+    {hpt:Math.min(90,13*lines(4))},{hpt:Math.min(160,12*lines(5))},{hpt:Math.min(60,12*lines(6))}]}
 function styleHeaderRow(ws,n){for(let c=0;c<n;c++)setStyle(ws,0,c,XS.head)}
-// A "Ref - " tab: the same six definition rows as the sheet tabs (with the list's Oracle source), then its codes from row 7.
+// A "Ref - " tab: the same seven definition rows as the sheet tabs (with the list's Oracle source), then its codes from row 8.
 function refTab(L,rows){const cols=L.fields.map((f,i)=>[f,i]);const aoa=templateHeader(L,cols);rows.forEach(([r])=>aoa.push(["",...cols.map(([,i])=>r[i]||"")]));
   const ws=XLSX.utils.aoa_to_sheet(aoa);ws["!cols"]=[{wch:26}].concat(L.fields.map(f=>({wch:f.n==="Description"?40:Math.max(16,Math.min(f.l||12,40))})));styleTemplateTab(ws,cols,ws["!cols"]);return ws}
 // Blank template: every sheet in load order with its header rows and no data, the reference-list tabs, and a Read me.
@@ -1421,10 +1515,10 @@ function exportBlankTemplate(){
   const wb=XLSX.utils.book_new();
   const rm=[["eAM conversion template"],["From the eAM load builder, "+new Date().toLocaleDateString()],[],
     ["How to use"],
-    ["1. Every tab, \"Ref - \" tabs included: fill from row 7, column B on, and leave column A blank."],
+    ["1. Every tab, \"Ref - \" tabs included: fill from row 8, column B on, and leave column A blank."],
     ["2. Work in load order (below): later sheets refer to earlier ones, e.g. an asset needs its Asset Group."],
     ["3. Bring the file back with Import in the eAM load builder or DataFlow's Build page. Every row is checked as it lands."],
-    ["4. Rows 1 to 6 describe each column: its name, Oracle data type, length or format, whether Oracle requires it (* in Comments too), the allowed values or the sheet it must exist on, and notes."],
+    ["4. Rows 1 to 7 describe each column: its name, Oracle data type, length or format, whether Oracle requires it (* in Comments too), the allowed values or the sheet it must exist on, notes, and the Oracle table and column it lands in."],
     ["5. \"Ref - \" tabs hold your valid Oracle codes (DataFlow can fill them from Oracle). A filled list has those columns checked; an empty one skips that check."],
     ["6. Already in Oracle = Y marks a row that's already in Oracle: it counts as a valid parent and isn't loaded."],
     [],["Load order"],["No.","Group","Sheet","Where in Oracle","Columns","Required columns"],
