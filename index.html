@@ -1576,15 +1576,17 @@ function doExport(mode,excl){
     const ws=XLSX.utils.aoa_to_sheet(aoa);ws["!cols"]=[{wch:10},{wch:26},{wch:8},{wch:26},{wch:10},{wch:90}];XLSX.utils.book_append_sheet(wb,ws,"Issues");
     saveFile("eAM_issue_log_"+stamp()+".xlsx",new Blob([XLSX.write(wb,{bookType:"xlsx",type:"array"})],{type:"application/octet-stream"}));return}
   const loader=mode==="load";
-  for(const sh of SHEETS){const rows=rowsFor(sh,loader,excl);if(!rows.length)continue;const cols=outCols(sh,loader);let aoa;
+  // The working workbook carries every sheet and list tab, empty ones too (header rows only), so it doubles as the
+  // full template; the loader export carries only sheets with rows to load.
+  for(const sh of SHEETS){const rows=rowsFor(sh,loader,excl);if(loader&&!rows.length)continue;const cols=outCols(sh,loader);let aoa;
     if(!loader){aoa=templateHeader(sh,cols);rows.forEach(([r])=>aoa.push(["",...cols.map(([f,i])=>outVal(f,r[i]||""))]))}
     else{aoa=[cols.map(([f])=>f.n)];rows.forEach(([r])=>aoa.push(cols.map(([f,i])=>outVal(f,r[i]||""))))}
     count+=rows.length;const ws=XLSX.utils.aoa_to_sheet(aoa);ws["!cols"]=loader?templateCols(cols).slice(1):templateCols(cols);
     if(loader)styleHeaderRow(ws,cols.length);else styleTemplateTab(ws,cols,ws["!cols"]);
     XLSX.utils.book_append_sheet(wb,ws,sh.name.slice(0,31))}
-  if(!loader)for(const L of LISTS){const rows=rowsFor(L,false,false);if(!rows.length)continue;count+=rows.length;const ws=refTab(L,rows);XLSX.utils.book_append_sheet(wb,ws,("Ref - "+L.name).slice(0,31))}
-  if(!loader&&count){const T=S.textRules;const ws=XLSX.utils.aoa_to_sheet([["Setting","Value"],["Code case",T.codeCase==="upper"?"UPPERCASE":"As typed"],["Flag repeated words",T.flagRepeat?"Y":"N"],["Flag all-capital descriptions",T.flagAllCaps?"Y":"N"],["Clean on entry",S.cleanOnEntry?"Y":"N"]]);ws["!cols"]=[{wch:32},{wch:14}];XLSX.utils.book_append_sheet(wb,ws,"Tool settings")}
-  if(!count){toast("Nothing to export yet");return}
+  if(!loader)for(const L of LISTS){const rows=rowsFor(L,false,false);count+=rows.length;const ws=refTab(L,rows);XLSX.utils.book_append_sheet(wb,ws,("Ref - "+L.name).slice(0,31))}
+  if(!loader){const T=S.textRules;const ws=XLSX.utils.aoa_to_sheet([["Setting","Value"],["Code case",T.codeCase==="upper"?"UPPERCASE":"As typed"],["Flag repeated words",T.flagRepeat?"Y":"N"],["Flag all-capital descriptions",T.flagAllCaps?"Y":"N"],["Clean on entry",S.cleanOnEntry?"Y":"N"]]);ws["!cols"]=[{wch:32},{wch:14}];XLSX.utils.book_append_sheet(wb,ws,"Tool settings")}
+  if(loader&&!count){toast("Nothing to export yet");return}
   saveFile("eAM_"+(loader?"loader_":"working_")+stamp()+".xlsx",new Blob([XLSX.write(wb,{bookType:"xlsx",type:"array"})],{type:"application/octet-stream"}));
 }
 
