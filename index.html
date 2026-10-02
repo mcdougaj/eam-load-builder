@@ -703,7 +703,8 @@ function renderRows(){
     h+="</div>"}
   rowsEl.innerHTML=h;
 }
-let rq=0;function paint(){if(rq)return;rq=requestAnimationFrame(()=>{rq=0;renderRows();renderStatus()})}
+// The grid is hidden on Summary and Reference lists: nothing to paint there (a resize or scroll would throw).
+let rq=0;function paint(){if(rq)return;rq=requestAnimationFrame(()=>{rq=0;if(!BYID[S.active])return;renderRows();renderStatus()})}
 grid.addEventListener("scroll",()=>{paint();if(editing)posEditor()});
 window.addEventListener("resize",paint);
 
