@@ -60,6 +60,8 @@ button{cursor:pointer}
 .stn .ct{font-size:12px;color:var(--ink3);font-variant-numeric:tabular-nums}
 .stn .ct b{font-weight:600;color:var(--err)}
 .stn .ct i{font-style:normal;color:var(--warn)}
+.stn .ct b.need{font-weight:600;color:var(--err)}
+.needl{margin:6px 0 8px 18px;padding:0;font-size:13px}.needl li{margin:2px 0}
 .stn:hover{background:var(--panel2)}
 .stn.on{background:var(--acc-bg)}
 .stn.on .nm{font-weight:600}
@@ -317,7 +319,7 @@ const SHEETS=[
  fields:[f("Category Set","t",30,1,{def:"Enterprise Asset Management"}),f("Category","t",81,1,{ref:rCat("Category")})],
  keys:[["Category Set","Category"]]},
 {id:"ag",g:"Foundation",name:"Asset Group",nav:"Capital: Assets > Asset Groups. Rebuildable Inventory: Rebuildables > Rebuild Items (the same form). Template must be a defined item template.",
- fields:[O(),f("Asset Type","e",22,1,{en:["Capital","Rebuildable Inventory"],def:"Capital"}),f("Asset Group","t",40,1),f("Description","t",240,1),f("Template Name","t",30,1,{lk:"templates",def:{col:"Asset Type",map:{"Rebuildable Inventory":"@Rebuildable"},other:"@Asset Group"}}),f("Serial Generation","e",10,1,{en:["Predefined","At Receipt"],hint:{"no control":"Asset groups must be serial-controlled in eAM (each asset number is a serial). Use Predefined or At Receipt."}}),f("Starting Prefix","t",30),f("Starting Number","t",30)],keys:[["Organization","Asset Group"]],
+ fields:[O(),f("Asset Type","e",22,0,{en:["Capital","Rebuildable Inventory"],def:"Capital"}),f("Asset Group","t",40,1),f("Description","t",240,1),f("Template Name","t",30,1,{lk:"templates",def:{col:"Asset Type",map:{"Rebuildable Inventory":"@Rebuildable"},other:"@Asset Group"}}),f("Serial Generation","e",10,1,{en:["Predefined","At Receipt"],hint:{"no control":"Asset groups must be serial-controlled in eAM (each asset number is a serial). Use Predefined or At Receipt."}}),f("Starting Prefix","t",30),f("Starting Number","t",30)],keys:[["Organization","Asset Group"]],
  // One rule: a second "rule" key in this literal would silently replace the first.
  rule(g,P,X){if(g("Serial Generation")==="Predefined")for(const n of ["Starting Prefix","Starting Number"])if(!g(n))P(n,"e",n+" is required when Serial Generation is Predefined",n+" required for Predefined");
   const o=g("Organization"),a=g("Asset Group");if(o&&a&&!X.set("ca",["Organization","Asset Group"]).has(k(o,a)))P("Asset Group","w","No category assigned to this asset group yet","Asset group has no category assignment")}},
@@ -325,7 +327,7 @@ const SHEETS=[
  fields:[O(),f("Asset Group","t",40,1,{ref:rAG}),f("Category","t",81,1,{ref:rCat("Category")})],
  keys:[["Organization","Asset Group","Category"],{f:["Organization","Asset Group"],sev:"w",msg:"Asset group has more than one category in the EAM set. Valid only if the set allows multiple assignments."}]},
 {id:"an",g:"Foundation",name:"Asset Numbers",nav:"eAM Administrator > Assets > Asset Numbers",
- fields:[O(),f("Asset Type","e",22,1,{en:["Capital","Rebuildable Inventory"],def:"Capital"}),f("Asset Number","t",30,1),f("Description","t",240),f("Asset Group","t",40,1,{ref:rAG}),f("Serial Number","t",30,1),f("Asset Category","t",81,0,{ref:rCat("Asset Category")}),f("Owning Department","t",10,0,{lk:"depts"}),f("Area","t",30,0,{ref:rArea}),f("Asset Criticality Code","t",80,0,{lk:"crit"}),f("WIP Accounting Class Code","t",10,0,{lk:"wip"}),f("Maintainable Flag","yn"),f("Operational Flag","yn"),f("Warranty Expiry Date","d"),f("Parent Asset Number","t",30,0,{ref:rAssetOnly("Parent Asset Number")}),f("Location Code","t",60),f("Fixed Asset","t",15),f("Latitude","n",0,0,{min:-90,max:90}),f("Longitude","n",0,0,{min:-180,max:180})],
+ fields:[O(),f("Asset Type","e",22,0,{en:["Capital","Rebuildable Inventory"],def:"Capital"}),f("Asset Number","t",30,1),f("Description","t",240),f("Asset Group","t",40,1,{ref:rAG}),f("Serial Number","t",30,1),f("Asset Category","t",81,0,{ref:rCat("Asset Category")}),f("Owning Department","t",10,0,{lk:"depts"}),f("Area","t",30,0,{ref:rArea}),f("Asset Criticality Code","t",80,0,{lk:"crit"}),f("WIP Accounting Class Code","t",10,0,{lk:"wip"}),f("Maintainable Flag","yn"),f("Operational Flag","yn"),f("Warranty Expiry Date","d"),f("Parent Asset Number","t",30,0,{ref:rAssetOnly("Parent Asset Number")}),f("Location Code","t",60),f("Fixed Asset","t",15),f("Latitude","n",0,0,{min:-90,max:90}),f("Longitude","n",0,0,{min:-180,max:180})],
  keys:[["Organization","Asset Number"],{f:["Organization","Asset Group","Serial Number"],msg:"Serial number repeats within this asset group"}],
  rule(g,P,X){const o=g("Organization"),a=g("Asset Group"),c=g("Asset Category");
   const typeOf=v=>/^rebuild/i.test(v||"")?"Rebuildable Inventory":"Capital";
@@ -599,8 +601,8 @@ function validateAll(){
       let ri=res.rows.get(r);if(!ri){ri={sev:"w",cells:new Map(),msgs:[]};res.rows.set(r,ri)}
       if(sev==="e")ri.sev="e";
       if(c>=0){let ce=ri.cells.get(c);if(!ce){ce={sev:"w",msgs:[]};ri.cells.set(c,ce)}if(sev==="e")ce.sev="e";ce.msgs.push([sev,msg,link])}else ri.msgs.push([sev,msg,link]);
-      const gk=sev+"|"+label;let gr=res.groups.get(gk);if(!gr){gr={sev,label,rows:[],fixes:new Map()};res.groups.set(gk,gr)}
-      gr.rows.push(r);if(fix){const fk=JSON.stringify(fix);if(!gr.fixes.has(fk))gr.fixes.set(fk,fix)}
+      const gk=sev+"|"+label;let gr=res.groups.get(gk);if(!gr){gr={sev,label,rows:[],fixes:new Map(),fixRows:new Map()};res.groups.set(gk,gr)}
+      gr.rows.push(r);if(fix){const fk=JSON.stringify(fix);if(!gr.fixes.has(fk))gr.fixes.set(fk,fix);gr.fixRows.set(fk,(gr.fixRows.get(fk)||0)+1)}
       if(sev==="e")res.e++;else res.w++;};
     const keyMaps=(sh.keys||[]).map(kd=>{const d=Array.isArray(kd)?{f:kd}:kd;return {d,m:new Map()}});
     for(let r=0;r<rows.length;r++){
@@ -871,10 +873,18 @@ function entryResult(title,touched){
 function hideResult(){$("result").className="result"}
 
 /* ============ rendering shells ============ */
+// Values other sheets point at that aren't on sheet tid (or in Oracle): their "not found on" errors, seen from the parent.
+function neededBy(tid){const out=new Map();
+  for(const sh of SHEETS){if(sh.id===tid)continue;const res=V[sh.id];if(!res)continue;
+    for(const g of res.groups.values()){if(!g.fixes.size||!/not found on/.test(g.label))continue;
+      for(const [key,fx] of g.fixes){if(fx.s!==tid)continue;let n=out.get(key);if(!n){n={fx,from:new Map()};out.set(key,n)}
+        n.from.set(sh.name,(n.from.get(sh.name)||0)+((g.fixRows&&g.fixRows.get(key))||1))}}}
+  return out}
 function renderRail(){
   let h="",lastG="";
   const stn=(sh,dot)=>{const r=V[sh.id];const st=r.e?"e":r.w?"w":r.n?"has":"";
-    return `<button class="stn ${st}${S.active===sh.id?" on":""}" data-id="${sh.id}"><span class="dot">${dot}</span><span class="nm">${esc(sh.name)}</span><span class="ct">${r.n?nfmt(r.n):""}${r.er?` <b>${nfmt(r.er)}</b>`:""}${!r.er&&r.wr?` <i>${nfmt(r.wr)}</i>`:""}</span></button>`};
+    const nb=sh.list?0:neededBy(sh.id).size;
+    return `<button class="stn ${nb&&!r.e?"e":st}${S.active===sh.id?" on":""}" data-id="${sh.id}"><span class="dot">${dot}</span><span class="nm">${esc(sh.name)}</span><span class="ct">${r.n?nfmt(r.n):""}${r.er?` <b>${nfmt(r.er)}</b>`:""}${!r.er&&r.wr?` <i>${nfmt(r.wr)}</i>`:""}${nb?` <b class="need" title="${nfmt(nb)} value${nb===1?"":"s"} other sheets need that aren't here or in Oracle">+${nfmt(nb)}</b>`:""}</span></button>`};
   const tot=SHEETS.reduce((a,x)=>a+V[x.id].n,0),te=SHEETS.reduce((a,x)=>a+V[x.id].er,0);
   h+=`<button class="stn${te?" e":tot?" has":""}${S.active==="_summary"?" on":""}" data-id="_summary"><span class="dot">S</span><span class="nm">Summary of findings</span><span class="ct">${te?`<b>${nfmt(te)}</b>`:""}</span></button>`;
   for(const sh of SHEETS){if(sh.g!==lastG){h+=`<h3>${esc(sh.g)}</h3>`;lastG=sh.g}h+=stn(sh,sh.no)}
@@ -895,10 +905,15 @@ function renderIssues(){
   const r=V[S.active];const sh=cur();
   let h=`<h2>Issues on ${esc(sh.name)}${sh.list?" list":""}</h2><div class="tally"><span class="te"><b>${nfmt(r.e)}</b>errors</span><span class="tw"><b>${nfmt(r.w)}</b>warnings</span><span><b>${nfmt(r.er+r.wr)}</b>rows affected</span></div>`;
   const groups=[...r.groups.values()].sort((a,b)=>(a.sev===b.sev?b.rows.length-a.rows.length:a.sev==="e"?-1:1));
-  if(!groups.length)h+=r.n?`<div class="clean-ok">All ${nfmt(r.n)} rows pass.</div>`:`<p class="muted" style="font-size:13.5px">Nothing to check yet.</p>`;
+  const need=sh.list?new Map():neededBy(S.active);
+  if(need.size){const items=[...need.values()];const shown=items.slice(0,8).map(n=>{const vals=Object.values(n.fx.v).filter(Boolean);
+      return `<li><b>${esc(vals[vals.length-1]||"")}</b>${vals.length>1?` <span class="muted">(${esc(vals.slice(0,-1).join(", "))})</span>`:""} <span class="muted">used by ${[...n.from].map(([nm,c])=>`${esc(nm)} (${nfmt(c)} row${c===1?"":"s"})`).join(", ")}</span></li>`}).join("");
+    h+=`<div class="grp e need"><div class="gt"><span class="sv"></span><span class="gl">Needed by other sheets: not here or in Oracle</span><span class="gn">${nfmt(need.size)}</span></div><ul class="needl">${shown}${items.length>8?`<li class="muted">and ${nfmt(items.length-8)} more</li>`:""}</ul><div class="ga"><button class="btn sm" id="needAdd" title="Adds each missing value as a new row here so you can finish its required fields">Add ${nfmt(need.size)} here</button></div></div>`}
+  if(!groups.length&&!need.size)h+=r.n?`<div class="clean-ok">All ${nfmt(r.n)} rows pass.</div>`:`<p class="muted" style="font-size:13.5px">Nothing to check yet.</p>`;
   groups.forEach((gr,i)=>{const nFix=gr.fixes.size;const tgt=nFix?BYID[[...gr.fixes.values()][0].s]:null;
     h+=`<div class="grp ${gr.sev}"><div class="gt"><span class="sv"></span><span class="gl">${esc(gr.label)}</span><span class="gn">${nfmt(gr.rows.length)}</span></div><div class="ga"><button class="btn sm" data-next="${i}">Next</button><button class="btn sm" data-only="${i}">Show rows</button>${nFix?`<button class="btn sm" data-fix="${i}" title="Adds the missing key values as new rows so you can finish them there">Add ${nfmt(nFix)} to ${esc(tgt.name)}</button>`:""}</div></div>`});
   h+=allSheetsTable();el.innerHTML=h;el._groups=groups;bindAll();
+  if(need.size&&$("needAdd"))$("needAdd").onclick=()=>addStubs({fixes:new Map([...need].map(([k2,n])=>[k2,n.fx]))});
 }
 function allSheetsTable(){let t=`<div class="allsheets"><h3>All sheets</h3><table>`;let te=0,tw=0;
   for(const sh of ALL){const r=V[sh.id];if(!r.n)continue;te+=r.e;tw+=r.w;t+=`<tr data-go="${sh.id}"><td>${sh.no?sh.no+". ":"List: "}${esc(sh.name)}</td><td class="n">${nfmt(r.n)}</td><td class="n e">${r.e?nfmt(r.e):""}</td><td class="n w">${r.w?nfmt(r.w):""}</td></tr>`}
