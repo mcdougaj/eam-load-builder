@@ -1284,6 +1284,13 @@ const SQLREF=/\b[a-z][a-z0-9_]*\.[a-z]*[_0-9][a-z0-9_]*\b/;
 // Fields whose real values are dotted codes (Segment1.Segment2) never mark a row as a mapping row.
 const dottedField=fl=>!!fl&&!!fl.ref&&(fl.ref.any||[fl.ref]).some(x=>x.s==="cat");
 const mapLike=(v,fl)=>typeof v==="string"&&!dottedField(fl)&&(MAPROW.test(v)||SQLREF.test(v));
+// A row whose filled cells are exactly the template's "Oracle column" row (MTL_PARAMETERS.ORGANIZATION_CODE, ...).
+// It is never data: an older builder imported that header row as a row, so import skips it and a saved one is dropped.
+function isOracleColumnRow(sh,row){let n=0;
+  for(let c=0;c<sh.fields.length;c++){const v=String(row[c]??"").trim();if(!v)continue;const o=oracleColumn(sh,sh.fields[c]);
+    if(!o||v.toLowerCase()!==o.toLowerCase())return false;if(o!=="Builder only")n++}
+  return n>=2}
+let healedRows=0;
 function extractTable(aoa,sh){
   // template layout: labels in column A, 'Field' row holds headers
   let hdrRow=-1,start=0;
@@ -1302,7 +1309,9 @@ function extractTable(aoa,sh){
     const noteLike=filled===1&&map.some((j,ci)=>j>=0&&String(r[ci]??"").length>40);
     if(lead&&(noteLike||r.some((v,ci)=>mapLike(v,sh.fields[map[ci]]))||(hdrRow>=0&&String(r[0]||"").trim()&&!map.includes(0)))){skipped++;continue}
     lead=false;
-    const row=new Array(sh.fields.length).fill("");map.forEach((j,ci)=>{if(j>=0)row[j]=r[ci]==null?"":r[ci]});out.push(row)}
+    const row=new Array(sh.fields.length).fill("");map.forEach((j,ci)=>{if(j>=0)row[j]=r[ci]==null?"":r[ci]});
+    if(isOracleColumnRow(sh,row)){skipped++;continue}
+    out.push(row)}
   const mapped=map.filter(j=>j>=0).length;
   return {rows:out,mapped,unmapped,skipped,positional:!!off};
 }
@@ -1648,7 +1657,8 @@ function savedCols(s,len,v){const names=(v.cols&&v.cols[s.id])||(s.layouts||[]).
   if(Array.isArray(names)&&names.length===len)return names.map(n=>s.ix[n]);
   const old=s.fields.filter(fl=>!fl.added);if(old.length===s.fields.length||len!==old.length)return null;return old.map(fl=>s.fields.indexOf(fl))}
 function applyState(v){if(!v||!v.data)return false;
-  for(const s of ALL){const rows=v.data[s.id];if(Array.isArray(rows))S.data[s.id]=rows.map(row=>{const a=new Array(s.fields.length).fill("");const at=savedCols(s,row.length,v);row.forEach((x,i)=>{const c=at?at[i]:i;if(c!=null&&c<a.length)a[c]=x==null?"":String(x)});return a})}
+  for(const s of ALL){const rows=v.data[s.id];if(Array.isArray(rows))S.data[s.id]=rows.map(row=>{const a=new Array(s.fields.length).fill("");const at=savedCols(s,row.length,v);row.forEach((x,i)=>{const c=at?at[i]:i;if(c!=null&&c<a.length)a[c]=x==null?"":String(x)});return a})
+    .filter(a=>isOracleColumnRow(s,a)?(healedRows++,false):true)}
   if(v.lists)migrateLists(v.lists);if(v.active&&(BYID[v.active]||v.active==="_lists"||v.active==="_summary"))S.active=v.active;
   if(typeof v.clean==="boolean")S.cleanOnEntry=v.clean;if(v.textRules)S.textRules=Object.assign(S.textRules,v.textRules);return true}
 // DataFlow edition: workbooks are files DataFlow owns. WB_NAME is the open workbook; dfWbWait resolves the startup request.
@@ -1669,7 +1679,8 @@ async function load(){
   if(DF_HOST){const v=await new Promise(res=>{dfWbWait=res;dfPost({type:"workbook-open"});setTimeout(()=>{if(dfWbWait===res){dfWbWait=null;res(null)}},5000)});
     const ok=applyState(v);$("saved").textContent=dfReady?(ok?"Opened workbook ":"New workbook ")+WB_NAME:dfErr||"DataFlow didn't send the workbook. Nothing will be saved.";return}
   try{db=await idb();if(!db)return;await new Promise(res=>{const tx=db.transaction("s","readonly");const r=tx.objectStore("s").get("draft");
-    r.onsuccess=()=>{if(applyState(r.result))$("saved").textContent="Draft restored from this browser";res()};r.onerror=()=>res()})}catch(e){}}
+    r.onsuccess=()=>{if(applyState(r.result))$("saved").textContent="Draft restored from this browser";res()};r.onerror=()=>res()})}catch(e){}
+  if(healedRows)setTimeout(()=>toast(`Removed ${healedRows} template "Oracle column" ${healedRows===1?"row":"rows"} that an older version imported as data`),600)}
 
 function migrateLists(old){
   for(const L of LISTS){const a=old[L.list];if(!Array.isArray(a)||S.data[L.id].length)continue;
