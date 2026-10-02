@@ -295,8 +295,6 @@ const O=()=>f("Organization","t",3,1,{lk:"orgs"});
 const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
 const ATTR_COLS=[...Array(20)].map((_,i)=>"C_ATTRIBUTE"+(i+1)).concat([...Array(10)].map((_,i)=>"N_ATTRIBUTE"+(i+1)),[...Array(10)].map((_,i)=>"D_ATTRIBUTE"+(i+1)));
 const rAG={s:"ag",m:[["Organization","Organization"],["Asset Group","Asset Group"]]};
-// Asset Numbers: a Rebuildable Inventory row's "Asset Group" is a rebuildable item, not an asset group.
-const rAGCapital={...rAG,when:g=>!/^rebuild/i.test(g("Asset Type"))};
 const rCat=src=>({s:"cat",m:[["Category Code",src]]});
 const rAssetOnly=src=>({s:"an",m:[["Organization","Organization"],["Asset Number",src]]});
 const rAsset=src=>({any:[{s:"an",m:[["Organization","Organization"],["Asset Number",src]]},{s:"rt",m:[["Organization","Organization"],["Asset Route Number",src]]}],label:"Asset Numbers or Asset Route"});
@@ -318,8 +316,8 @@ const SHEETS=[
 {id:"cs",g:"Foundation",name:"Category Set",nav:"Setup > Category > Category Sets: query the set, then add the category to Enforce List of Valid Categories. Category Assignment can't use a category until it's on the set's list (APP-INV-05180).",
  fields:[f("Category Set","t",30,1,{def:"Enterprise Asset Management"}),f("Category","t",81,1,{ref:rCat("Category")})],
  keys:[["Category Set","Category"]]},
-{id:"ag",g:"Foundation",name:"Asset Group",nav:"eAM Administrator > Assets > Asset Groups. Template must be a defined item template.",
- fields:[O(),f("Asset Group","t",40,1),f("Description","t",240,1),f("Template Name","t",30,1,{lk:"templates",def:"@Asset Group"}),f("Serial Generation","e",10,1,{en:["Predefined","At Receipt"],hint:{"no control":"Asset groups must be serial-controlled in eAM (each asset number is a serial). Use Predefined or At Receipt."}}),f("Starting Prefix","t",30),f("Starting Number","t",30)],keys:[["Organization","Asset Group"]],
+{id:"ag",g:"Foundation",name:"Asset Group",nav:"Capital: Assets > Asset Groups. Rebuildable Inventory: Rebuildables > Rebuild Items (the same form). Template must be a defined item template.",
+ fields:[O(),f("Asset Type","e",22,1,{en:["Capital","Rebuildable Inventory"],def:"Capital"}),f("Asset Group","t",40,1),f("Description","t",240,1),f("Template Name","t",30,1,{lk:"templates",def:{col:"Asset Type",map:{"Rebuildable Inventory":"@Rebuildable"},other:"@Asset Group"}}),f("Serial Generation","e",10,1,{en:["Predefined","At Receipt"],hint:{"no control":"Asset groups must be serial-controlled in eAM (each asset number is a serial). Use Predefined or At Receipt."}}),f("Starting Prefix","t",30),f("Starting Number","t",30)],keys:[["Organization","Asset Group"]],
  // One rule: a second "rule" key in this literal would silently replace the first.
  rule(g,P,X){if(g("Serial Generation")==="Predefined")for(const n of ["Starting Prefix","Starting Number"])if(!g(n))P(n,"e",n+" is required when Serial Generation is Predefined",n+" required for Predefined");
   const o=g("Organization"),a=g("Asset Group");if(o&&a&&!X.set("ca",["Organization","Asset Group"]).has(k(o,a)))P("Asset Group","w","No category assigned to this asset group yet","Asset group has no category assignment")}},
@@ -327,9 +325,12 @@ const SHEETS=[
  fields:[O(),f("Asset Group","t",40,1,{ref:rAG}),f("Category","t",81,1,{ref:rCat("Category")})],
  keys:[["Organization","Asset Group","Category"],{f:["Organization","Asset Group"],sev:"w",msg:"Asset group has more than one category in the EAM set. Valid only if the set allows multiple assignments."}]},
 {id:"an",g:"Foundation",name:"Asset Numbers",nav:"eAM Administrator > Assets > Asset Numbers",
- fields:[O(),f("Asset Type","e",22,1,{en:["Capital","Rebuildable Inventory"],def:"Capital"}),f("Asset Number","t",30,1),f("Description","t",240),f("Asset Group","t",40,1,{ref:rAGCapital}),f("Serial Number","t",30,1),f("Asset Category","t",81,0,{ref:rCat("Asset Category")}),f("Owning Department","t",10,0,{lk:"depts"}),f("Area","t",30,0,{ref:rArea}),f("Asset Criticality Code","t",80,0,{lk:"crit"}),f("WIP Accounting Class Code","t",10,0,{lk:"wip"}),f("Maintainable Flag","yn"),f("Operational Flag","yn"),f("Warranty Expiry Date","d"),f("Parent Asset Number","t",30,0,{ref:rAssetOnly("Parent Asset Number")}),f("Location Code","t",60),f("Fixed Asset","t",15),f("Latitude","n",0,0,{min:-90,max:90}),f("Longitude","n",0,0,{min:-180,max:180})],
+ fields:[O(),f("Asset Type","e",22,1,{en:["Capital","Rebuildable Inventory"],def:"Capital"}),f("Asset Number","t",30,1),f("Description","t",240),f("Asset Group","t",40,1,{ref:rAG}),f("Serial Number","t",30,1),f("Asset Category","t",81,0,{ref:rCat("Asset Category")}),f("Owning Department","t",10,0,{lk:"depts"}),f("Area","t",30,0,{ref:rArea}),f("Asset Criticality Code","t",80,0,{lk:"crit"}),f("WIP Accounting Class Code","t",10,0,{lk:"wip"}),f("Maintainable Flag","yn"),f("Operational Flag","yn"),f("Warranty Expiry Date","d"),f("Parent Asset Number","t",30,0,{ref:rAssetOnly("Parent Asset Number")}),f("Location Code","t",60),f("Fixed Asset","t",15),f("Latitude","n",0,0,{min:-90,max:90}),f("Longitude","n",0,0,{min:-180,max:180})],
  keys:[["Organization","Asset Number"],{f:["Organization","Asset Group","Serial Number"],msg:"Serial number repeats within this asset group"}],
  rule(g,P,X){const o=g("Organization"),a=g("Asset Group"),c=g("Asset Category");
+  const typeOf=v=>/^rebuild/i.test(v||"")?"Rebuildable Inventory":"Capital";
+  const agRows=a&&X.rowsBy("ag",["Organization","Asset Group"]).get(k(o,a));
+  if(agRows){const t=typeOf(X.map("ag",["Organization","Asset Group"],"Asset Type").get(k(o,a)));if(t!==typeOf(g("Asset Type")))P("Asset Type","e",`"${a}" is ${t} on Asset Group, but this asset is ${typeOf(g("Asset Type"))}`,"Asset type doesn't match its asset group",null,{s:"ag",rows:agRows})}
   if(a&&c&&X.set("ca",["Organization","Asset Group"]).has(k(o,a))&&!X.set("ca",["Organization","Asset Group","Category"]).has(k(o,a,c)))P("Asset Category","w",`Category "${c}" isn't assigned to asset group "${a}" on Category Assignment`,"Asset category not assigned to its asset group",{s:"ca",v:{Organization:o,"Asset Group":a,Category:c}});
   if(g("Parent Asset Number")&&g("Parent Asset Number")===g("Asset Number"))P("Parent Asset Number","e","An asset can't be its own parent","Asset is its own parent");
   const an=g("Asset Number"),sn=g("Serial Number");
@@ -1212,11 +1213,18 @@ function startFresh(){const rows=SHEETS.reduce((a,x)=>a+V[x.id].n,0),lv=LISTS.re
     if(!ids.length&&!rr){closeModal();return}
     if(ids.length)snapshot(ids,"Start fresh");ids.forEach(id=>S.data[id]=[]);if(rr)S.textRules={codeCase:"as_typed",flagRepeat:true,flagAllCaps:false};
     closeModal();focusRows=null;hideResult();changed();toast(`Cleared ${ids.length?nfmt(ids.length)+" sheets and lists":"text rules"}. Undo brings the rows back until you reload.`,ids.length?undo:null,"Undo")}}
+// A field default: "text", "=Other Column" (copies it), or {col,map,other} — picks by another column's value
+// (Template Name: "@Rebuildable" when Asset Type is Rebuildable Inventory, else "@Asset Group").
+function defVal(fl,row,sh){const d=fl.def;if(typeof d==="object"){const v=(row[sh.ix[d.col]]||"").trim().toLowerCase();
+  const hit=Object.keys(d.map).find(x=>x.toLowerCase()===v);return hit?d.map[hit]:d.other}
+  return d.startsWith("=")?row[sh.ix[d.slice(1)]]||"":d}
+function defText(fl){const d=fl.def;if(typeof d==="object")return `Blank: ${Object.entries(d.map).map(([k,v])=>`${v} when ${d.col} is ${k}`).join(", ")}, otherwise ${d.other}.`;
+  return d.startsWith("=")?`Blank: copies ${d.slice(1)}.`:`Blank: ${d}.`}
 function cleanSheet(id,report){
   const sh=BYID[id];snapshot([id],"Clean "+sh.name);
   const rows=S.data[id];let cells=0,defs=0;
   for(const row of rows){sh.fields.forEach((fl,c)=>{const before=row[c]||"";const after=cleanVal(fl,before);if(after!==before){row[c]=after;cells++}})}
-  for(const row of rows){if(isBlank(row))continue;sh.fields.forEach((fl,c)=>{if(!row[c]&&fl.def){const v=fl.def.startsWith("=")?row[sh.ix[fl.def.slice(1)]]||"":fl.def;if(v){row[c]=v;defs++}}})}
+  for(const row of rows){if(isBlank(row))continue;sh.fields.forEach((fl,c)=>{if(!row[c]&&fl.def){const v=defVal(fl,row,sh);if(v){row[c]=v;defs++}}})}
   const seen=new Set();const out=[];let dups=0,blanks=0;
   for(const row of rows){if(isBlank(row)){blanks++;continue}const key=row.join(SEP);if(seen.has(key)){dups++;continue}seen.add(key);out.push(row)}
   S.data[id]=out;changed();
@@ -1332,7 +1340,7 @@ const ORA={
  area:{Organization:ORG,Area:"MTL_EAM_LOCATIONS.LOCATION_CODES",Description:"MTL_EAM_LOCATIONS.DESCRIPTION","Start Date":"MTL_EAM_LOCATIONS.START_DATE","End Date":"MTL_EAM_LOCATIONS.END_DATE"},
  cat:{Segment1:"MTL_CATEGORIES_B.SEGMENT1",Segment2:"MTL_CATEGORIES_B.SEGMENT2",Description:"MTL_CATEGORIES_TL.DESCRIPTION"},
  cs:{"Category Set":"MTL_CATEGORY_SETS_TL.CATEGORY_SET_NAME","Category":"MTL_CATEGORY_SET_VALID_CATS.CATEGORY_ID (via Segment1.Segment2)"},
- ag:{Organization:ORG,"Asset Group":"MTL_SYSTEM_ITEMS_B.SEGMENT1 (EAM_ITEM_TYPE 1)",Description:"MTL_SYSTEM_ITEMS_TL.DESCRIPTION","Template Name":"MTL_ITEM_TEMPLATES_B.TEMPLATE_NAME",
+ ag:{Organization:ORG,"Asset Type":"MTL_SYSTEM_ITEMS_B.EAM_ITEM_TYPE (1 Capital, 3 Rebuildable Inventory)","Asset Group":"MTL_SYSTEM_ITEMS_B.SEGMENT1",Description:"MTL_SYSTEM_ITEMS_TL.DESCRIPTION","Template Name":"MTL_ITEM_TEMPLATES_B.TEMPLATE_NAME",
   "Serial Generation":"MTL_SYSTEM_ITEMS_B.SERIAL_NUMBER_CONTROL_CODE (lookup MTL_SERIAL_NUMBER)","Starting Prefix":"MTL_SYSTEM_ITEMS_B.AUTO_SERIAL_ALPHA_PREFIX","Starting Number":"MTL_SYSTEM_ITEMS_B.START_AUTO_SERIAL_NUMBER"},
  ca:{Organization:ORG,"Asset Group":"MTL_ITEM_CATEGORIES.INVENTORY_ITEM_ID (via asset group)",Category:"MTL_ITEM_CATEGORIES.CATEGORY_ID (via Segment1.Segment2)"},
  an:{"Asset Type":"MTL_SYSTEM_ITEMS_B.EAM_ITEM_TYPE of the asset group (1 Capital, 3 Rebuildable Inventory)","Asset Number":IFC+"INSTANCE_NUMBER",Description:IFC+"DESCRIPTIVE_TEXT","Asset Group":IFC+"INVENTORY_ITEM_ID (via asset group)","Serial Number":IFC+"SERIAL_NUMBER",
@@ -1417,7 +1425,8 @@ const NOTES={
  area:{Area:"Unique within the organization."},
  cat:{Segment1:"Category Code = Segment1.Segment2. The pair must be unique.",Segment2:"Second segment of the Category Code."},
  cs:{"Category Set":"The category set whose list of valid categories gets the category. eAM uses Enterprise Asset Management.","Category":"A Category Code (Segment1.Segment2) from Category. Every category Category Assignment uses must be on its set's list first."},
- ag:{"Asset Group":"Give it a category on Category Assignment.","Template Name":"A defined item template (Ref - Item templates).",
+ ag:{"Asset Type":"Capital = Asset Groups. Rebuildable Inventory = Rebuild Items (the same form under Rebuildables). Blank: Capital.",
+  "Asset Group":"Give it a category on Category Assignment. For Rebuildable Inventory this is the rebuild item.","Template Name":"A defined item template (Ref - Item templates).",
   "Serial Generation":"Asset groups must be serial-controlled: Predefined or At Receipt (No Control is refused).",
   "Starting Prefix":"Required when Serial Generation is Predefined.","Starting Number":"Required when Serial Generation is Predefined."},
  ca:{Category:"A Category Code (Segment1.Segment2) from Category.",
@@ -1472,7 +1481,7 @@ function fieldComment(sh,fl){
     ||(fl.n==="Organization"&&!sh.list?"ERP inventory organization code, e.g. FAC.":"");
   if(note)out.push(dot(note));
   if(typeof fl.added==="string")out.push(dot(fl.added));
-  if(fl.def)out.push(fl.def.startsWith("=")?`Blank: copies ${fl.def.slice(1)}.`:`Blank: ${fl.def}.`);
+  if(fl.def)out.push(defText(fl));
   if(fl.after)out.push(`On or after ${fl.after}.`);
   if(fl.min!=null&&fl.max!=null)out.push(`${fl.min} to ${fl.max}.`);else if(fl.min!=null)out.push(`${fl.min} or more.`);else if(fl.max!=null)out.push(`${fl.max} or less.`);
   if(fl.gt0)out.push("More than 0.");
