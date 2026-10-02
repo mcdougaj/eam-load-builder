@@ -295,6 +295,8 @@ const O=()=>f("Organization","t",3,1,{lk:"orgs"});
 const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
 const ATTR_COLS=[...Array(20)].map((_,i)=>"C_ATTRIBUTE"+(i+1)).concat([...Array(10)].map((_,i)=>"N_ATTRIBUTE"+(i+1)),[...Array(10)].map((_,i)=>"D_ATTRIBUTE"+(i+1)));
 const rAG={s:"ag",m:[["Organization","Organization"],["Asset Group","Asset Group"]]};
+// Asset Numbers: a Rebuildable Inventory row's "Asset Group" is a rebuildable item, not an asset group.
+const rAGCapital={...rAG,when:g=>!/^rebuild/i.test(g("Asset Type"))};
 const rCat=src=>({s:"cat",m:[["Category Code",src]]});
 const rAssetOnly=src=>({s:"an",m:[["Organization","Organization"],["Asset Number",src]]});
 const rAsset=src=>({any:[{s:"an",m:[["Organization","Organization"],["Asset Number",src]]},{s:"rt",m:[["Organization","Organization"],["Asset Route Number",src]]}],label:"Asset Numbers or Asset Route"});
@@ -325,7 +327,7 @@ const SHEETS=[
  fields:[O(),f("Asset Group","t",40,1,{ref:rAG}),f("Category","t",81,1,{ref:rCat("Category")})],
  keys:[["Organization","Asset Group","Category"],{f:["Organization","Asset Group"],sev:"w",msg:"Asset group has more than one category in the EAM set. Valid only if the set allows multiple assignments."}]},
 {id:"an",g:"Foundation",name:"Asset Numbers",nav:"eAM Administrator > Assets > Asset Numbers",
- fields:[f("Asset Number","t",30,1),f("Description","t",240),f("Asset Group","t",40,1,{ref:rAG}),f("Serial Number","t",30,1),f("Asset Category","t",81,0,{ref:rCat("Asset Category")}),O(),f("Owning Department","t",10,0,{lk:"depts"}),f("Area","t",30,0,{ref:rArea}),f("Asset Criticality Code","t",80,0,{lk:"crit"}),f("WIP Accounting Class Code","t",10,0,{lk:"wip"}),f("Maintainable Flag","yn"),f("Operational Flag","yn"),f("Warranty Expiry Date","d"),f("Parent Asset Number","t",30,0,{ref:rAssetOnly("Parent Asset Number")}),f("Location Code","t",60),f("Fixed Asset","t",15),f("Latitude","n",0,0,{min:-90,max:90}),f("Longitude","n",0,0,{min:-180,max:180})],
+ fields:[O(),f("Asset Type","e",22,1,{en:["Capital","Rebuildable Inventory"],def:"Capital"}),f("Asset Number","t",30,1),f("Description","t",240),f("Asset Group","t",40,1,{ref:rAGCapital}),f("Serial Number","t",30,1),f("Asset Category","t",81,0,{ref:rCat("Asset Category")}),f("Owning Department","t",10,0,{lk:"depts"}),f("Area","t",30,0,{ref:rArea}),f("Asset Criticality Code","t",80,0,{lk:"crit"}),f("WIP Accounting Class Code","t",10,0,{lk:"wip"}),f("Maintainable Flag","yn"),f("Operational Flag","yn"),f("Warranty Expiry Date","d"),f("Parent Asset Number","t",30,0,{ref:rAssetOnly("Parent Asset Number")}),f("Location Code","t",60),f("Fixed Asset","t",15),f("Latitude","n",0,0,{min:-90,max:90}),f("Longitude","n",0,0,{min:-180,max:180})],
  keys:[["Organization","Asset Number"],{f:["Organization","Asset Group","Serial Number"],msg:"Serial number repeats within this asset group"}],
  rule(g,P,X){const o=g("Organization"),a=g("Asset Group"),c=g("Asset Category");
   if(a&&c&&X.set("ca",["Organization","Asset Group"]).has(k(o,a))&&!X.set("ca",["Organization","Asset Group","Category"]).has(k(o,a,c)))P("Asset Category","w",`Category "${c}" isn't assigned to asset group "${a}" on Category Assignment`,"Asset category not assigned to its asset group",{s:"ca",v:{Organization:o,"Asset Group":a,Category:c}});
@@ -641,7 +643,7 @@ function validateAll(){
   }
 }
 function checkRef(fl,g,X,add){
-  const ref=fl.ref;const alts=ref.any||[ref];
+  const ref=fl.ref;if(ref.when&&!ref.when(g))return;const alts=ref.any||[ref];
   const srcVals=alts[0].m.map(p=>g(p[1]));if(srcVals.some(x=>!x))return;
   for(const alt of alts){const kk=alt.m.map(p=>g(p[1])).join(SEP);if(X.set(alt.s,alt.m.map(p=>p[0])).has(kk))return}
   // DataFlow edition: a reference that exists in Oracle (e.g. a parent asset loaded earlier) is valid too.
@@ -1333,7 +1335,7 @@ const ORA={
  ag:{Organization:ORG,"Asset Group":"MTL_SYSTEM_ITEMS_B.SEGMENT1 (EAM_ITEM_TYPE 1)",Description:"MTL_SYSTEM_ITEMS_TL.DESCRIPTION","Template Name":"MTL_ITEM_TEMPLATES_B.TEMPLATE_NAME",
   "Serial Generation":"MTL_SYSTEM_ITEMS_B.SERIAL_NUMBER_CONTROL_CODE (lookup MTL_SERIAL_NUMBER)","Starting Prefix":"MTL_SYSTEM_ITEMS_B.AUTO_SERIAL_ALPHA_PREFIX","Starting Number":"MTL_SYSTEM_ITEMS_B.START_AUTO_SERIAL_NUMBER"},
  ca:{Organization:ORG,"Asset Group":"MTL_ITEM_CATEGORIES.INVENTORY_ITEM_ID (via asset group)",Category:"MTL_ITEM_CATEGORIES.CATEGORY_ID (via Segment1.Segment2)"},
- an:{"Asset Number":IFC+"INSTANCE_NUMBER",Description:IFC+"DESCRIPTIVE_TEXT","Asset Group":IFC+"INVENTORY_ITEM_ID (via asset group)","Serial Number":IFC+"SERIAL_NUMBER",
+ an:{"Asset Type":"MTL_SYSTEM_ITEMS_B.EAM_ITEM_TYPE of the asset group (1 Capital, 3 Rebuildable Inventory)","Asset Number":IFC+"INSTANCE_NUMBER",Description:IFC+"DESCRIPTIVE_TEXT","Asset Group":IFC+"INVENTORY_ITEM_ID (via asset group)","Serial Number":IFC+"SERIAL_NUMBER",
   "Asset Category":IFC+"CATEGORY_ID (via category code)",Organization:IFC+"ORGANIZATION_CODE","Owning Department":IFC+"OWNING_DEPARTMENT_CODE",Area:IFC+"LOCATION_CODES",
   "Asset Criticality Code":IFC+"ASSET_CRITICALITY_CODE (lookup MTL_EAM_ASSET_CRITICALITY)","WIP Accounting Class Code":IFC+"WIP_ACCOUNTING_CLASS_CODE","Maintainable Flag":IFC+"MAINTAINABLE_FLAG",
   "Operational Flag":IFC+"OPERATIONAL_LOG_FLAG","Warranty Expiry Date":IFC+"SUPPLIER_WARRANTY_EXP_DATE","Parent Asset Number":IFC+"PARENT_INSTANCE_NUMBER","Fixed Asset":IFC+"FA_ASSET_NUMBER"},
@@ -1420,7 +1422,8 @@ const NOTES={
   "Starting Prefix":"Required when Serial Generation is Predefined.","Starting Number":"Required when Serial Generation is Predefined."},
  ca:{Category:"A Category Code (Segment1.Segment2) from Category.",
   "Asset Group":"Usually one category per asset group in the Enterprise Asset Management category set."},
- an:{"Asset Number":"Unique in the organization. Can't also be an Asset Route Number (routes are asset numbers).",
+ an:{"Asset Type":"Capital = Assets > Asset Numbers. Rebuildable Inventory = Rebuildables > Rebuildable Serial Numbers, and Asset Group holds the rebuildable item. Blank: Capital.",
+  "Asset Number":"Unique in the organization. Can't also be an Asset Route Number (routes are asset numbers).",
   "Serial Number":"Unique within the asset group, assets and routes together.",
   "Asset Category":"Should be the category assigned to the asset group on Category Assignment.",
   "Parent Asset Number":"Another asset on this sheet (or in Oracle). An asset can't be its own parent."},
