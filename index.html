@@ -324,10 +324,10 @@ const SHEETS=[
  rule(g,P,X){if(g("Serial Generation")==="Predefined")for(const n of ["Starting Prefix","Starting Number"])if(!g(n))P(n,"e",n+" is required when Serial Generation is Predefined",n+" required for Predefined");
   const o=g("Organization"),a=g("Asset Group");if(o&&a&&!X.set("ca",["Organization","Asset Group"]).has(k(o,a)))P("Asset Group","w","No category assigned to this asset group yet","Asset group has no category assignment")}},
 {id:"ca",g:"Foundation",name:"Category Assignment",nav:"Setup > Category > Category Sets (Enterprise Asset Management) > Assign",
- fields:[O(),f("Asset Group","t",40,1,{ref:rAG}),f("Category","t",81,1,{ref:rCat("Category")})],
+ fields:[O(),f("Asset Group","t",40,1,{ref:rAG}),f("Category","t",81,1,{ref:rCat("Category"),also:[{s:"cs",m:[["Category","Category"]],label:"Category Set (the set's list of valid categories)"}]})],
  keys:[["Organization","Asset Group","Category"],{f:["Organization","Asset Group"],sev:"w",msg:"Asset group has more than one category in the EAM set. Valid only if the set allows multiple assignments."}]},
 {id:"an",g:"Foundation",name:"Asset Numbers",nav:"eAM Administrator > Assets > Asset Numbers",
- fields:[O(),f("Asset Type","e",22,0,{en:["Capital","Rebuildable Inventory"],def:"Capital"}),f("Asset Number","t",30,1),f("Description","t",240),f("Asset Group","t",40,1,{ref:rAG}),f("Serial Number","t",30,1),f("Asset Category","t",81,0,{ref:rCat("Asset Category")}),f("Owning Department","t",10,0,{lk:"depts"}),f("Area","t",30,0,{ref:rArea}),f("Asset Criticality Code","t",80,0,{lk:"crit"}),f("WIP Accounting Class Code","t",10,0,{lk:"wip"}),f("Maintainable Flag","yn"),f("Operational Flag","yn"),f("Warranty Expiry Date","d"),f("Parent Asset Number","t",30,0,{ref:rAssetOnly("Parent Asset Number")}),f("Location Code","t",60),f("Fixed Asset","t",15),f("Latitude","n",0,0,{min:-90,max:90}),f("Longitude","n",0,0,{min:-180,max:180})],
+ fields:[O(),f("Asset Type","e",22,0,{en:["Capital","Rebuildable Inventory"],def:"Capital"}),f("Asset Number","t",30,1),f("Description","t",240),f("Asset Group","t",40,1,{ref:{...rAG,carry:[["Asset Type","Asset Type"]]}}),f("Serial Number","t",30,1),f("Asset Category","t",81,0,{ref:rCat("Asset Category")}),f("Owning Department","t",10,0,{lk:"depts"}),f("Area","t",30,0,{ref:rArea}),f("Asset Criticality Code","t",80,0,{lk:"crit"}),f("WIP Accounting Class Code","t",10,0,{lk:"wip"}),f("Maintainable Flag","yn"),f("Operational Flag","yn"),f("Warranty Expiry Date","d"),f("Parent Asset Number","t",30,0,{ref:rAssetOnly("Parent Asset Number")}),f("Location Code","t",60),f("Fixed Asset","t",15),f("Latitude","n",0,0,{min:-90,max:90}),f("Longitude","n",0,0,{min:-180,max:180})],
  keys:[["Organization","Asset Number"],{f:["Organization","Asset Group","Serial Number"],msg:"Serial number repeats within this asset group"}],
  rule(g,P,X){const o=g("Organization"),a=g("Asset Group"),c=g("Asset Category");
   const typeOf=v=>/^rebuild/i.test(v||"")?"Rebuildable Inventory":"Capital";
@@ -390,8 +390,7 @@ const SHEETS=[
 {id:"fsa",g:"Failure analysis",name:"Failure Set Associations",nav:"A set can cover several asset groups",
  fields:[f("Set Name","t",80,1,{ref:rFS}),f("Asset Group","t",40,1,{ref:{s:"ag",m:[["Asset Group","Asset Group"]]}}),f("Failure Code Required Flag","yn")],keys:[["Set Name","Asset Group"]]},
 {id:"fcomb",g:"Failure analysis",name:"Failure Combinations",
- fields:[f("Set Name","t",80,1,{ref:rFS}),f("Failure Code","t",80,1),f("Cause Code","t",80,1),f("Resolution Code","t",80,1),f("Effective End Date","d")],keys:[["Set Name","Failure Code","Cause Code","Resolution Code"]],
- rule(g,P,X){for(const [fld,sid,sheet] of [["Failure Code","fc","Failure Codes"],["Cause Code","cc","Cause Codes"],["Resolution Code","rc","Resolution Codes"]]){const v=g(fld);if(v&&!X.set(sid,[fld]).has(k(v)))P(fld,"e",`"${v}" isn't on ${sheet}`,`${fld} not on ${sheet}`,{s:sid,v:{[fld]:v}})}}},
+ fields:[f("Set Name","t",80,1,{ref:rFS}),f("Failure Code","t",80,1,{ref:{s:"fc",m:[["Failure Code","Failure Code"]]}}),f("Cause Code","t",80,1,{ref:{s:"cc",m:[["Cause Code","Cause Code"]]}}),f("Resolution Code","t",80,1,{ref:{s:"rc",m:[["Resolution Code","Resolution Code"]]}}),f("Effective End Date","d")],keys:[["Set Name","Failure Code","Cause Code","Resolution Code"]]},
 {id:"met",g:"Meters",name:"Meters",
  fields:[f("Name","t",80,1),f("Description","t",240),f("Type","e",8,1,{en:["Absolute","Change"]}),f("UOM","t",3,1,{lk:"uom"}),f("Value Change","e",11,1,{en:["Ascending","Descending","Fluctuating"]}),f("Used In Scheduling","yn"),f("Required","yn"),f("Rate (per day)","n"),f("Number of Past Readings","n"),f("Initial Reading","n"),f("Initial Read Date","d"),f("Effective From","d"),f("Effective To","d",0,0,{after:"Effective From"})],keys:[["Name"]]},
 {id:"mas",g:"Meters",name:"Meter Asset Association",fields:[O(),f("Meter Name","t",80,1,{ref:rMeter("Meter Name")}),f("Asset Number","t",30,1,{ref:rAssetOnly("Asset Number")})],keys:[["Organization","Meter Name","Asset Number"]]},
@@ -455,12 +454,10 @@ const SHEETS=[
  fields:[O(),f("Schedule Name","t",50,1,{ref:rSched}),f("Meter Name","t",80,1,{ref:rMeter("Meter Name")}),f("Effective From","d"),f("Effective To","d",0,0,{after:"Effective From"}),f("Run Interval","n",0,1,{gt0:"e"}),f("Last Service Reading","n")],keys:[["Organization","Schedule Name","Meter Name"]]},
 {id:"pml",g:"Preventive maintenance",name:"PM Date Lists",fields:[O(),f("Schedule Name","t",50,1,{ref:rSched}),f("List Date","d",0,1),f("List Date Description","t",50)],keys:[["Organization","Schedule Name","List Date"]]},
 {id:"att",g:"Other",name:"Attachments",nav:"Asset Attachments point to an asset; Routing and Operation Attachments point to an activity",
- fields:[O(),f("Asset No/Activity","t",40,1),f("Operation Sequence Number","n"),f("Sequence","n",0,1,{min:1}),f("Category","e",255,1,{en:["Routing Attachments","Operation Attachments","Asset Attachments"]}),f("Title","t",80),f("Description","t",255),f("Data Type","e",10,1,{en:["Short Text","Long Text","Web Page"]}),f("Text","t",32767),f("URL","t",4000)],
+ fields:[O(),f("Asset No/Activity","t",40,1,{ref:{...rAsset("Asset No/Activity"),when:g=>g("Category")==="Asset Attachments"},also:[{...rAct("Asset No/Activity"),when:g=>!!g("Category")&&g("Category")!=="Asset Attachments"}]}),f("Operation Sequence Number","n",0,0,{ref:{...rOp("Asset No/Activity","Operation Sequence Number"),when:g=>g("Category")==="Operation Attachments"}}),f("Sequence","n",0,1,{min:1}),f("Category","e",255,1,{en:["Routing Attachments","Operation Attachments","Asset Attachments"]}),f("Title","t",80),f("Description","t",255),f("Data Type","e",10,1,{en:["Short Text","Long Text","Web Page"]}),f("Text","t",32767),f("URL","t",4000)],
  keys:[["Organization","Asset No/Activity","Category","Operation Sequence Number","Sequence"]],
  rule(g,P,X){const o=g("Organization"),e=g("Asset No/Activity"),c=g("Category"),dt=g("Data Type");
-  if(e&&c==="Asset Attachments"&&!X.set("an",["Organization","Asset Number"]).has(k(o,e))&&!X.set("rt",["Organization","Asset Route Number"]).has(k(o,e)))P("Asset No/Activity","e",`Asset "${e}" not found on Asset Numbers`,"Attachment asset not found");
-  if(e&&c&&c!=="Asset Attachments"&&!X.set("act",["Organization","Activity Name"]).has(k(o,e)))P("Asset No/Activity","e",`Activity "${e}" not found on Activity`,"Attachment activity not found");
-  if(c==="Operation Attachments"){const s=g("Operation Sequence Number");if(!s)P("Operation Sequence Number","e","Required for Operation Attachments","Operation attachment without sequence");else if(e&&!X.set("aop",["Organization","Activity Name","Operation Sequence Number"]).has(k(o,e,s)))P("Operation Sequence Number","e",`Operation ${s} not found for activity "${e}"`,"Attachment operation not found")}
+  if(c==="Operation Attachments"&&!g("Operation Sequence Number"))P("Operation Sequence Number","e","Required for Operation Attachments","Operation attachment without sequence");
   else if(c&&g("Operation Sequence Number"))P("Operation Sequence Number","w","Leave blank unless Category is Operation Attachments","Operation sequence on a non-operation attachment");
   if((dt==="Short Text"||dt==="Long Text")&&!g("Text"))P("Text","e",dt+" needs Text","Text attachment without text");
   if(dt==="Short Text"&&g("Text").length>4000)P("Text","e","Short Text is limited to 4,000 characters","Short text over 4,000 characters");
@@ -630,6 +627,7 @@ function validateAll(){
         if(S.textRules.codeCase==="upper"&&isCodeField(fl)&&!fl.lk&&/[a-z]/.test(v))add(r,c,"w","Should be uppercase under your text rules",`${fl.n}: not uppercase`);
         if(fl.after){const a=g(fl.after);if(a&&isDate(a)&&isDate(v)&&dnum(v)<dnum(a))add(r,c,"e",`Earlier than ${fl.after}`,`${fl.n} before ${fl.after}`)}
         if(fl.ref&&!flag)checkRef(fl,g,X,(sev,msg,label,fix)=>add(r,c,sev,msg,label,fix));
+        if(fl.also&&!flag)for(const r2 of fl.also)checkRef({...fl,ref:r2},g,X,(sev,msg,label,fix)=>add(r,c,sev,msg,label,fix));
       });
       for(const km of keyMaps){const vals=km.d.f.map(g);if(vals.some((x,i)=>!x&&(sh.fields[sh.ix[km.d.f[i]]]||{}).r))continue;const kk=vals.join(SEP);const a=km.m.get(kk);if(a)a.push(r);else km.m.set(kk,[r])}
       if(sh.rule&&!flag)sh.rule(g,(fld,sev,msg,label,fix,link)=>add(r,fld==null?-1:(sh.ix[fld]??-1),sev,msg,label,fix,link),X);
@@ -658,7 +656,9 @@ function checkRef(fl,g,X,add){
   const orgP=alts[0].m.find(p=>p[0]==="Organization");
   const caseHit=alts.some(alt=>X.setLC(alt.s,alt.m.map(p=>p[0])).has(alt.m.map(p=>g(p[1])).join(SEP).toLowerCase()));
   const vals={};alts[0].m.forEach(p=>vals[p[0]]=g(p[1]));
-  add("e",`"${last}" isn't on ${lbl}${orgP?" for org "+g(orgP[1]):""}${DF_HOST?(pending?" (checking Oracle…)":" or in Oracle"):""}${caseHit?" (a match exists with different letter case)":""}`,`${fl.n} not found on ${lbl}${DF_HOST?" or in Oracle":""}`,{s:alts[0].s,v:vals});
+  // carry: fields copied into a row added on the parent (an asset's Asset Type goes with its missing asset group).
+  const carry={};for(const [pc,tc] of ref.carry||[]){const v=g(tc);if(v)carry[pc]=v}
+  add("e",`"${last}" isn't on ${lbl}${orgP?" for org "+g(orgP[1]):""}${DF_HOST?(pending?" (checking Oracle…)":" or in Oracle"):""}${caseHit?" (a match exists with different letter case)":""}`,`${fl.n} not found on ${lbl}${DF_HOST?" or in Oracle":""}`,ref.carry?{s:alts[0].s,v:vals,c:carry}:{s:alts[0].s,v:vals});
 }
 
 /* ============ grid ============ */
@@ -876,7 +876,7 @@ function hideResult(){$("result").className="result"}
 // Values other sheets point at that aren't on sheet tid (or in Oracle): their "not found on" errors, seen from the parent.
 function neededBy(tid){const out=new Map();
   for(const sh of SHEETS){if(sh.id===tid)continue;const res=V[sh.id];if(!res)continue;
-    for(const g of res.groups.values()){if(!g.fixes.size||!/not found on/.test(g.label))continue;
+    for(const g of res.groups.values()){if(!g.fixes.size)continue;
       for(const [key,fx] of g.fixes){if(fx.s!==tid)continue;let n=out.get(key);if(!n){n={fx,from:new Map()};out.set(key,n)}
         n.from.set(sh.name,(n.from.get(sh.name)||0)+((g.fixRows&&g.fixRows.get(key))||1))}}}
   return out}
@@ -934,11 +934,21 @@ function addStubs(gr){
   const fixes=[...gr.fixes.values()];const tid=fixes[0].s;const tsh=BYID[tid];
   snapshot([tid],"Add missing rows to "+tsh.name);
   const X=buildCtx();const have=new Set(S.data[tid].filter(r=>!isBlank(r)).map(r=>{const g=X.getter(tsh,r);return JSON.stringify(Object.keys(fixes[0].v).map(g))}));
-  let n=0;for(const fx of fixes){const key=JSON.stringify(Object.keys(fx.v).map(kk=>fx.v[kk]));if(have.has(key))continue;have.add(key);
+  const added=[];for(const fx of fixes){const key=JSON.stringify(Object.keys(fx.v).map(kk=>fx.v[kk]));if(have.has(key))continue;have.add(key);
     const row=new Array(tsh.fields.length).fill("");
     for(const [fld,val] of Object.entries(fx.v)){if(tsh.ix[fld]!=null)row[tsh.ix[fld]]=val;else if(tsh.split&&tsh.split[fld]){const parts=tsh.split[fld](val);for(const p in parts)row[tsh.ix[p]]=parts[p]}}
-    S.data[tid].push(row);n++}
-  changed();toast(`Added ${nfmt(n)} rows to ${tsh.name}. Finish the required fields there.`,()=>openSheet(tid),"Go to "+tsh.name);
+    for(const [fld,val] of Object.entries(fx.c||{}))if(tsh.ix[fld]!=null&&!row[tsh.ix[fld]])row[tsh.ix[fld]]=val;
+    // The sheet's defaults (Asset Type Capital, a template, ...) so only what needs a person stays blank.
+    tsh.fields.forEach((fl,c)=>{if(!row[c]&&fl.def){const v=defVal(fl,row,tsh);if(v)row[c]=v}});
+    S.data[tid].push(row);added.push(S.data[tid].length-1)}
+  changed();
+  if(!added.length){toast(`Those values are already on ${tsh.name}.`);return}
+  // Go there and show just the new rows, with the required fields they still need.
+  openSheet(tid);focusRows=new Set(added);sel={r:added[0],c:0,ar:added[0],ac:0};refresh();ensureVisible();
+  const blanks=tsh.fields.map((fl,c)=>[fl,added.filter(d=>!(S.data[tid][d][c]||"").trim()).length]).filter(([fl,k])=>fl.r&&k);
+  const el=$("result");el.className="result show mid";
+  el.innerHTML=`<strong>Added ${nfmt(added.length)} row${added.length===1?"":"s"} other sheets need. ${blanks.length?`Still blank and required: ${blanks.map(([fl,k])=>`${esc(fl.n)} (${nfmt(k)} row${k===1?"":"s"})`).join(", ")}. Fill these in so the rows can load.`:"Every required field is filled."}</strong><button class="btn sm" id="rAll">Show all rows</button>`;
+  $("rAll").onclick=()=>{focusRows=null;hideResult();refresh()};
 }
 
 
@@ -1573,7 +1583,8 @@ function exportBlankTemplate(){
 }
 const TLABEL={t:"varchar2",e:"varchar2",yn:"varchar2",n:"number",d:"date",dt:"date"};
 function fieldLen(fl){return fl.t==="d"?"mm/dd/yyyy":fl.t==="dt"?"mm/dd/yyyy hh:mm":fl.t==="yn"?1:fl.l||""}
-function fieldRule(fl){if(fl.tool)return "Y/N, tool only";if(fl.t==="yn")return "Y/N";if(fl.t==="e")return fl.en.join(", ");if(fl.ref)return "Must exist on "+(fl.ref.label||BYID[(fl.ref.any||[fl.ref])[0].s].name);if(fl.lk)return "LOV: "+LKLABEL[fl.lk];return ""}
+function fieldRule(fl){if(fl.tool)return "Y/N, tool only";if(fl.t==="yn")return "Y/N";if(fl.t==="e")return fl.en.join(", ");if(fl.ref){const nm=r=>r.label||BYID[(r.any||[r])[0].s].name;const refs=[fl.ref,...(fl.also||[])];
+    return refs.some(r=>r.when)?"Must exist on "+refs.map(nm).join(" or ")+" (by "+(fl.n==="Asset No/Activity"||fl.n==="Operation Sequence Number"?"Category":"type")+")":"Must exist on "+refs.map(nm).join(" and ")}if(fl.lk)return "LOV: "+LKLABEL[fl.lk];return ""}
 function outVal(fl,v){if(v&&fl.t==="n"&&isNum(v))return Number(v);return v}
 $("bExport").onclick=()=>{
   const tot=SHEETS.reduce((a,s)=>a+V[s.id].n-V[s.id].nx,0),terr=SHEETS.reduce((a,s)=>a+V[s.id].er,0),tx=SHEETS.reduce((a,s)=>a+V[s.id].nx,0),tl=LISTS.reduce((a,s)=>a+V[s.id].n,0);
