@@ -318,7 +318,7 @@ const SHEETS=[
  derive:{"Category Code":g=>g("Segment1")&&g("Segment2")?g("Segment1")+"."+g("Segment2"):""},
  split:{"Category Code":v=>{const i=v.indexOf(".");return i<0?{Segment1:v}:{Segment1:v.slice(0,i),Segment2:v.slice(i+1)}}}},
 {id:"cs",g:"Foundation",name:"Category Set",nav:"Setup > Category > Category Sets: query the set, then add the category to Enforce List of Valid Categories. Category Assignment can't use a category until it's on the set's list (APP-INV-05180).",
- fields:[f("Category Set","t",30,1,{def:"Enterprise Asset Management"}),f("Category","t",81,1,{ref:rCat("Category")})],
+ fields:[f("Category Set","t",30,1,{def:"Enterprise Asset Management",auto:1}),f("Category","t",81,1,{ref:rCat("Category")})],
  keys:[["Category Set","Category"]],
  rule(g,P){const cs=g("Category Set"),c=g("Category");if(cs&&c&&cs===c)P("Category Set","e","This is the category, not the set. Enter the category set name (for eAM: Enterprise Asset Management)","Category Set holds a category code")}},
 {id:"ag",g:"Foundation",name:"Asset Group",nav:"Capital: Assets > Asset Groups. Rebuildable Inventory: Rebuildables > Rebuild Items (the same form). Template must be a defined item template.",
@@ -1089,7 +1089,12 @@ function openSheet(id){
   sel={r:0,c:0,ar:0,ac:0};layout();renderHead();grid.scrollTop=0;grid.scrollLeft=0;refresh();save();
 }
 function refresh(){if(S.active==="_summary"){renderSummary();renderRail();renderIssues();return}if(S.active==="_lists"){renderRefOverview();renderRail();renderIssues();return}computeView();renderRows();renderStatus();renderRail();renderIssues()}
-function changed(){validateAll();refresh();scheduleSave()}
+// Fields marked auto always take their default when left blank (the eAM category set); on Category Set a category code
+// typed as the set name is replaced too. Runs on every change and when a workbook is opened.
+function autoDefaults(){let n=0;for(const sh of SHEETS){const cols=sh.fields.map((fl,c)=>fl.auto&&typeof fl.def==="string"?c:-1).filter(c=>c>=0);if(!cols.length)continue;
+  for(const row of S.data[sh.id]){if(!row||isBlank(row))continue;for(const c of cols){const v=row[c]||"";
+    if(!v||(sh.id==="cs"&&v===(row[sh.ix.Category]||""))){row[c]=sh.fields[c].def;n++}}}}return n}
+function changed(){autoDefaults();validateAll();refresh();scheduleSave()}
 
 /* DataFlow link: send the selected rows to DataFlow on this PC, which test-runs, loads and checks them
    in Oracle, then report back which rows are now in Oracle so they can be marked "Already in Oracle". */
@@ -1844,7 +1849,7 @@ let WB_NAME="",dfWbWait=null,dfReady=false,dfErr="";
 function dfWorkbook(m){DF_PLAN=null;WB_NAME=m.name||"";dfReady=true;dfErr="";if(dfWbWait){const f=dfWbWait;dfWbWait=null;f(m.state||null);return}
   // DataFlow switched workbooks while the page is open: start from empty, then apply the file.
   for(const s of ALL)S.data[s.id]=[];S.textRules={codeCase:"as_typed",flagRepeat:true,flagAllCaps:false};
-  applyState(m.state);$("autoclean").checked=S.cleanOnEntry;validateAll();openSheet(BYID[S.active]||S.active==="_lists"||S.active==="_summary"?S.active:SHEETS[0].id);
+  applyState(m.state);$("autoclean").checked=S.cleanOnEntry;if(autoDefaults())scheduleSave();validateAll();openSheet(BYID[S.active]||S.active==="_lists"||S.active==="_summary"?S.active:SHEETS[0].id);
   $("saved").textContent=(m.state?"Opened workbook ":"New workbook ")+WB_NAME}
 async function save(){
   if(DF_HOST){if(!dfReady)return;dfPost({type:"workbook-save",name:WB_NAME,state:stateObj()});const d=new Date();$("saved").textContent=`Saved to ${WB_NAME||"workbook"} ${pad(d.getHours())}:${pad(d.getMinutes())}`;return}
