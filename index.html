@@ -257,6 +257,7 @@ button{cursor:pointer}
       <button class="btn sm" id="bUpdateDF" title="Change existing Oracle records with an update recipe">▶ Update selected</button>
       <button class="btn sm" id="bCheckDF" title="Ask DataFlow which rows on this sheet are already in Oracle and mark them Already in Oracle (read-only — nothing is changed in Oracle)">✓ Check Oracle</button>
       <button class="btn sm" id="bCheckAllDF" title="Check the whole workbook against Oracle (read-only): marks rows already there, lists missing codes and links, and what has to be loaded first">Check workbook</button>
+      <button class="btn sm" id="bChainDF" title="Load the selected rows through Oracle's APIs together with everything they need that is not in Oracle yet (areas, categories, asset groups, parents...), sheet by sheet in load order">Load with what they need</button>
       <span class="sep"></span>
       <label class="chk"><select id="fView" class="btn sm"><option value="all">All rows</option><option value="issues">Rows with issues</option><option value="errors">Rows with errors</option></select></label>
       <span class="muted" id="rowcount" style="font-size:13px"></span>
@@ -993,7 +994,7 @@ function renderSummary(){
   const D=summaryData(),el=$("summary");const pct=D.T.rows-D.T.flag?Math.round(100*D.T.ready/(D.T.rows-D.T.flag)):0;
   if(!D.T.rows){el.innerHTML=`<p class="muted" style="font-size:14px">No rows yet. Import a workbook or start on 1. Area, and the findings show up here.</p><button class="btn sm" id="sumFresh">Start fresh</button>`;$("sumFresh").onclick=startFresh;return}
   let h=`<div class="kpis"><div class="kpi"><b>${nfmt(D.T.rows)}</b><span>rows across ${D.sheets.length} sheets</span></div><div class="kpi ok"><b>${pct}%</b><span>${nfmt(D.T.ready)} rows ready to load</span></div><div class="kpi e"><b>${nfmt(D.T.err)}</b><span>rows with errors</span></div><div class="kpi w"><b>${nfmt(D.T.warn)}</b><span>ready, with warnings</span></div><div class="kpi"><b>${nfmt(D.T.flag)}</b><span>marked already in Oracle</span></div></div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap">${DF_HOST?`<button class="btn sm pri" id="sumOra" title="Looks every row and every code up in Oracle (read-only), marks rows already there, and lists what is missing and what has to be loaded first">Check workbook against Oracle</button>`:""}<button class="btn sm" id="sumCopy">Copy summary as text</button><button class="btn sm" id="sumAsk">Ask for a written summary</button><button class="btn sm" id="sumLog">Export issue log</button><button class="btn sm" id="sumFresh">Start fresh</button></div>`;
+  <div style="display:flex;gap:8px;flex-wrap:wrap">${DF_HOST?`<button class="btn sm pri" id="sumOra" title="Looks every row and every code up in Oracle (read-only), marks rows already there, and lists what is missing and what has to be loaded first">Check workbook against Oracle</button><button class="btn sm" id="sumChain" title="Loads every row that is not in Oracle yet through Oracle's APIs, sheet by sheet in load order. Rows with errors are left out.">Load everything not in Oracle</button>`:""}<button class="btn sm" id="sumCopy">Copy summary as text</button><button class="btn sm" id="sumAsk">Ask for a written summary</button><button class="btn sm" id="sumLog">Export issue log</button><button class="btn sm" id="sumFresh">Start fresh</button></div>`;
   h+=planHtml();
   if(D.miss.length){h+=`<div class="sumsec">Missing parent records<small>Rows point at records that aren't on the parent sheet or marked as already in Oracle. These block the most rows, so fill them first.</small></div><table class="stab"><colgroup><col style="width:21%"><col style="width:13%"><col style="width:13%"><col></colgroup><tr><th>Parent sheet</th><th class="n">Missing values</th><th class="n">Rows affected</th><th>Referenced from</th></tr>${D.miss.map(m=>`<tr class="go" data-go="${m.sh.id}"><td class="nm" title="${esc(m.sh.name)}">${m.sh.no}. ${esc(m.sh.name)}</td><td class="n">${nfmt(m.values)}</td><td class="n">${nfmt(m.rows)}</td><td class="tw">${esc(m.from.join(", "))}</td></tr>`).join("")}</table>`}
   h+=`<div class="sumsec">Load readiness by sheet<small>In load order. Ready means no errors; warnings don't block. Select a row to open the sheet.</small></div><table class="stab"><colgroup><col style="width:21%"><col style="width:7%"><col style="width:7%"><col style="width:7%"><col style="width:8.5%"><col style="width:8.5%"><col style="width:9%"><col></colgroup><tr><th>Sheet</th><th class="n">Rows</th><th class="n">Ready</th><th class="n">Errors</th><th class="n">Warnings</th><th class="n">In Oracle</th><th>Status</th><th>Biggest issue</th></tr>`;
@@ -1007,6 +1008,7 @@ function renderSummary(){
   el.querySelectorAll("[data-iss]").forEach(tr=>tr.onclick=()=>{const x=D.issues[+tr.dataset.iss];showRows(x.sh.id,x.g.rows,x.g.label)});
   $("sumCopy").onclick=()=>copyPlain(summaryText(D));
   if($("sumOra"))$("sumOra").onclick=dfReadiness;
+  if($("sumChain"))$("sumChain").onclick=()=>dfLoadChain(true);
   el.querySelectorAll("[data-first]").forEach(tr=>tr.onclick=()=>{const f=DF_PLAN.first[+tr.dataset.first];showRows(f.sh.id,[f.d],"Load first")});
   $("sumLog").onclick=()=>doExport("iss",false);$("sumFresh").onclick=startFresh;
   $("sumAsk").onclick=()=>{if(!$("wrap").classList.contains("chatting"))openChat();sendChat("Write a short findings summary for a manager: what's ready, what's blocking the load, and the top three fixes in order. Use these numbers and check any sheet you need.\n\n"+summaryText(D))};
@@ -1215,8 +1217,8 @@ const dfAsk=(sid,fields,rows)=>new Promise(res=>dfSendLookup(sid,fields,rows,res
 const dfWaiting=()=>dfLookupQ.size>0||[...DF_ASKED.values()].some(a=>[...a.values()].includes("?"));
 let dfChecking=false;
 async function dfReadiness(){
-  if(!DF_HOST){toast("The Oracle check runs in DataFlow's Build page.");return}
-  if(dfChecking){toast("The Oracle check is still running.");return}
+  if(!DF_HOST){toast("The Oracle check runs in DataFlow's Build page.");return false}
+  if(dfChecking){toast("The Oracle check is still running.");return false}
   if(editing)commitEdit();
   dfChecking=true;toast("Checking the workbook against Oracle…");const wb0=WB_NAME;
   try{
@@ -1244,13 +1246,14 @@ async function dfReadiness(){
     for(let i=0;i<1700&&dfWaiting();i++)await new Promise(r=>setTimeout(r,200));
     validateAll();
     // 3. The plan.
-    if(WB_NAME!==wb0){toast("The workbook changed while Oracle was being checked - run the check again.");return}
+    if(WB_NAME!==wb0){toast("The workbook changed while Oracle was being checked - run the check again.");return false}
     DF_PLAN=readinessPlan(checked,cells.size);DF_PLAN.waiting=dfWaiting()||[...DF_ASKED.values()].some(a=>[...a.values()].includes("x"));
     openSheet("_summary");
     const te=DF_PLAN.sheets.reduce((a,x)=>a+x.err,0);
     toast(`Oracle check ${DF_PLAN.waiting?"not complete (some values could not be checked in Oracle - run it again)":"done"}: ${nfmt(cells.size)} row${cells.size===1?"":"s"} newly marked Already in Oracle, ${nfmt(te)} row${te===1?"":"s"} with errors, ${nfmt(DF_PLAN.first.length)} to load first.`)}
-  catch(e){console.error(e);toast("The Oracle check stopped: "+(e&&e.message||e))}
-  finally{dfChecking=false}}
+  catch(e){console.error(e);toast("The Oracle check stopped: "+(e&&e.message||e));return false}
+  finally{dfChecking=false}
+  return true}
 // Per sheet (load order): rows in Oracle, to load, with errors, and the rows later sheets wait for ("load first"):
 // a row that is not in Oracle and that another row not in Oracle refers to.
 function readinessPlan(checked,marked){const X=buildCtx(),need=new Map(),sheets=[];
@@ -1274,6 +1277,51 @@ function planHtml(){const P=DF_PLAN;if(!P)return "";
   if(P.first.length)h+=`<div class="sumsec">Load first<small>Rows that are not in Oracle yet and that other rows refer to. Load them, in this order, before the rows that need them. Select one to open it.</small></div><table class="stab"><colgroup><col style="width:21%"><col style="width:7%"><col style="width:30%"><col></colgroup><tr><th>Sheet</th><th class="n">Row</th><th>Record</th><th>Needed by</th></tr>${P.first.slice(0,200).map((f,i)=>`<tr class="go" data-first="${i}"><td class="nm">${f.sh.no}. ${esc(f.sh.name)}</td><td class="n">${f.d+1}</td><td class="tw">${esc(f.key)}</td><td class="tw">${esc(f.by)}</td></tr>`).join("")}</table>${P.first.length>200?`<p class="muted">${nfmt(P.first.length-200)} more in the exported issue log.</p>`:""}`;
   if(P.lists.length)h+=`<p class="muted" style="font-size:13px">Not checked: these reference lists are empty, so their columns aren't checked: ${esc(P.lists.join(", "))}. Fill them with Reference lists &gt; Fill lists from Oracle.</p>`;
   return h}
+/* ---- Chained load: the rows, and everything they need that is not in Oracle yet, one step per sheet in load order ---- */
+// scope "all": every row not in Oracle. scope {sid, rows}: those rows plus the rows on other sheets they depend on
+// (directly or through other rows). A row with an error is left out, and so is every row that depends on it.
+// Links that are rules, not column references: the rows a row also needs on another sheet (sheet, key columns, values).
+const CHAIN_LINKS={
+  an:(g,X)=>[["ca",["Organization","Asset Group","Category"],[g("Organization"),g("Asset Group"),g("Asset Category")]]],
+  attv:(g,X)=>[["atta",["Organization","Asset Group","Attribute Group"],[g("Organization"),X.map("an",["Organization","Asset Number"],"Asset Group").get(g("Organization")+SEP+g("Asset Number"))||"",g("Attribute Group")]]]};
+function chainPlan(scope){const X=buildCtx(),memo=new Map(),need=new Map(),want=new Map(),left=[];
+  const deps=(sh,d)=>{const g=X.getter(sh,S.data[sh.id][d]),out=[];
+    for(const fl of sh.fields){const alts=[...(fl.ref&&(!fl.ref.when||fl.ref.when(g))?(fl.ref.any||[fl.ref]):[]),...(fl.also||[])];
+      for(const alt of alts){if(alt.when&&!alt.when(g))continue;const vals=alt.m.map(p=>g(p[1]));if(vals.some(v=>!v))continue;const P=BYID[alt.s];
+        for(const pd of X.rowsBy(alt.s,alt.m.map(p=>p[0])).get(vals.join(SEP))||[])if(!(alt.s===sh.id&&pd===d)&&!isFlag(P,S.data[alt.s][pd]))out.push([alt.s,pd])}}
+    for(const [ps,kf,vals] of (CHAIN_LINKS[sh.id]?CHAIN_LINKS[sh.id](g,X):[])){if(vals.some(v=>!v))continue;
+      for(const pd of X.rowsBy(ps,kf).get(vals.join(SEP))||[])if(!isFlag(BYID[ps],S.data[ps][pd]))out.push([ps,pd])}
+    return out};
+  const visit=(sid,d,trail)=>{const key=sid+SEP+d;if(memo.has(key))return memo.get(key);if(trail.has(key))return true;   // a loop of parents is an error on the rows themselves
+    const sh=BYID[sid],row=S.data[sid][d],ri=V[sid].rows.get(d);
+    if(!row||isBlank(row)||isFlag(sh,row)){memo.set(key,true);return true}                     // nothing to load here, nothing in the way
+    if(ri&&ri.sev==="e"){memo.set(key,false);left.push({sh,d,why:"has errors"});return false}
+    const dl=deps(sh,d);need.set(key,dl);trail.add(key);let bad=null;for(const [ps,pd] of dl)if(!visit(ps,pd,trail)){bad=BYID[ps].name+" row "+(pd+1);break}trail.delete(key);
+    if(bad){memo.set(key,false);left.push({sh,d,why:"needs "+bad+", which is left out"});return false}
+    memo.set(key,true);return true};
+  // Only rows a loadable row leads to are sent: what a left-out row needs is not loaded on its own.
+  const take=(sid,d)=>{const key=sid+SEP+d;if(!need.has(key)||memo.get(key)!==true)return;let w=want.get(sid);if(!w){w=new Set();want.set(sid,w)}if(w.has(d))return;w.add(d);for(const [ps,pd] of need.get(key))take(ps,pd)};
+  if(scope==="all")for(const sh of SHEETS)S.data[sh.id].forEach((row,d)=>{if(visit(sh.id,d,new Set()))take(sh.id,d)});
+  else for(const d of scope.rows)if(visit(scope.sid,d,new Set()))take(scope.sid,d);
+  const steps=SHEETS.filter(sh=>want.has(sh.id)).map(sh=>dfRows(sh,[...want.get(sh.id)].sort((a,b)=>a-b)));
+  return {steps,left}}
+async function dfLoadChain(all){
+  if(!DF_HOST)return;if(editing)commitEdit();
+  let scope="all";
+  if(!all){const sh=BYID[S.active];if(!sh||sh.list){toast("Open a sheet first.");return}
+    const r0=Math.min(sel.r,sel.ar),r1=Math.max(sel.r,sel.ar),rows=[];
+    for(let vr=r0;vr<=r1;vr++){const d=dr(vr);if(d==null||d>=dataRowCount())continue;const row=S.data[sh.id][d];if(!isBlank(row)&&!isFlag(sh,row))rows.push(d)}
+    if(!rows.length){toast("Select the rows to load first. Rows marked Already in Oracle are skipped.");return}
+    scope={sid:sh.id,rows}}
+  if(!(await dfReadiness()))return;                         // fresh marks and Oracle answers first
+  const waiting=!!(DF_PLAN&&DF_PLAN.waiting);
+  const {steps,left}=chainPlan(scope),n=steps.reduce((a,x)=>a+x.rows.length,0);
+  if(!n){modal(`<h2>Nothing to load</h2><p>${left.length?nfmt(left.length)+" row"+(left.length===1?" has":"s have")+" errors (or depend on a row with errors). Fix them first: the Summary lists them under Top issues.":"Every row is already in Oracle."}</p><div class="row"><button class="btn pri" data-close>Close</button></div>`);return}
+  const leftH=left.length?`<p><b>${nfmt(left.length)} row${left.length===1?" is":"s are"} left out</b> (errors, or they need a row that is left out):</p><table>${left.slice(0,8).map(x=>`<tr><td>${esc(x.sh.name)} row ${x.d+1}</td><td>${esc(x.why)}</td></tr>`).join("")}</table>${left.length>8?`<p class="muted">and ${nfmt(left.length-8)} more</p>`:""}`:"";
+  modal(`<h2>Load ${nfmt(n)} row${n===1?"":"s"} in ${steps.length} step${steps.length===1?"":"s"}</h2><p>DataFlow loads these sheets one after the other, in load order, through Oracle's APIs. Each step is tested first; when every row passes it loads by itself, otherwise DataFlow stops and asks.</p>
+  <table><tr><th>Step</th><th>Sheet</th><th class="n">Rows</th></tr>${steps.map((x,i)=>`<tr><td>${i+1}</td><td>${esc(x.sheet)}</td><td class="n">${nfmt(x.rows.length)}</td></tr>`).join("")}</table>${leftH}${waiting?`<p class="muted">Some values could not be checked in Oracle. DataFlow tests every row before it loads, so a missing value stops that step.</p>`:""}
+  <div class="row"><button class="btn" data-close>Cancel</button><button class="btn pri" id="chainGo">Load ${nfmt(n)} row${n===1?"":"s"}</button></div>`);
+  $("chainGo").onclick=()=>{closeModal();dfPost({type:"load-chain",steps});toast(`Sent ${steps.length} step${steps.length===1?"":"s"} to DataAPI. The sheets update as rows reach Oracle.`)}}
 // Update selected: the columns that find the record — the sheet's first key without Organization, else its first
 // required column other than Organization (the same default DataFlow's recipe wizard uses). Column indexes.
 function dfKeyCols(sh){const k0=(sh.keys||[])[0],names=(Array.isArray(k0)?k0:(k0&&k0.f)||[]).filter(n=>n!=="Organization");
@@ -1309,8 +1357,8 @@ async function dfSendSelected(mode){const upd=mode==="update";const sh=BYID[S.ac
 
 /* toolbar */
 $("bUndo").onclick=undo;
-if(DF_HOST){$("bLoadDF").onclick=dfLoadSelected;$("bUpdateDF").onclick=dfUpdateSelected;$("bCheckDF").onclick=dfCheckOracle;$("bCheckAllDF").onclick=dfReadiness}
-else ["bLoadDF","bUpdateDF","bCheckDF","bCheckAllDF"].forEach(id=>$(id).remove());   // standalone edition: validation only
+if(DF_HOST){$("bLoadDF").onclick=dfLoadSelected;$("bUpdateDF").onclick=dfUpdateSelected;$("bCheckDF").onclick=dfCheckOracle;$("bCheckAllDF").onclick=dfReadiness;$("bChainDF").onclick=()=>dfLoadChain(false)}
+else ["bLoadDF","bUpdateDF","bCheckDF","bCheckAllDF","bChainDF"].forEach(id=>$(id).remove());   // standalone edition: validation only
 $("fView").onchange=e=>{S.view=e.target.value;focusRows=null;hideResult();sel={r:0,c:0,ar:0,ac:0};grid.scrollTop=0;refresh()};
 $("autoclean").onchange=e=>{S.cleanOnEntry=e.target.checked;scheduleSave()};
 $("bDel").onclick=()=>{const r0=Math.min(sel.r,sel.ar),r1=Math.max(sel.r,sel.ar);const del=new Set();for(let vr=r0;vr<=r1;vr++){const d=dr(vr);if(d!=null&&d<dataRowCount())del.add(d)}
