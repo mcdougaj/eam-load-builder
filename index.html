@@ -322,7 +322,10 @@ const SHEETS=[
  fields:[O(),f("Asset Type","e",22,0,{en:["Capital","Rebuildable Inventory"],def:"Capital"}),f("Asset Group","t",40,1),f("Description","t",240,1),f("Template Name","t",30,1,{lk:"templates",def:{col:"Asset Type",map:{"Rebuildable Inventory":"@Rebuildable"},other:"@Asset Group"}}),f("Serial Generation","e",10,1,{en:["Predefined","At Receipt"],hint:{"no control":"Asset groups must be serial-controlled in eAM (each asset number is a serial). Use Predefined or At Receipt."}}),f("Starting Prefix","t",30),f("Starting Number","t",30)],keys:[["Organization","Asset Group"]],
  // One rule: a second "rule" key in this literal would silently replace the first.
  rule(g,P,X){if(g("Serial Generation")==="Predefined")for(const n of ["Starting Prefix","Starting Number"])if(!g(n))P(n,"e",n+" is required when Serial Generation is Predefined",n+" required for Predefined");
-  const o=g("Organization"),a=g("Asset Group");if(o&&a&&!X.set("ca",["Organization","Asset Group"]).has(k(o,a)))P("Asset Group","w","No category assigned to this asset group yet","Asset group has no category assignment")}},
+  const o=g("Organization"),a=g("Asset Group");
+  // No category on Category Assignment - and, in DataFlow, none in Oracle either (nothing is said while Oracle is asked).
+  if(o&&a&&!X.set("ca",["Organization","Asset Group"]).has(k(o,a))&&(!DF_HOST||dfState("ca",["Organization","Asset Group"],[o,a])==="n"))
+    P("Asset Group","w",DF_HOST?"No category is assigned to this asset group (Category Assignment or Oracle). Assets that carry a category will be rejected":"No category assigned to this asset group yet","Asset group has no category assignment")}},
 {id:"ca",g:"Foundation",name:"Category Assignment",nav:"Setup > Category > Category Sets (Enterprise Asset Management) > Assign",
  fields:[O(),f("Asset Group","t",40,1,{ref:rAG}),f("Category","t",81,1,{ref:rCat("Category"),also:[{s:"cs",m:[["Category","Category"]],label:"Category Set (the set's list of valid categories)"}]})],
  keys:[["Organization","Asset Group","Category"],{f:["Organization","Asset Group"],sev:"w",msg:"Asset group has more than one category in the EAM set. Valid only if the set allows multiple assignments."}]},
@@ -333,7 +336,12 @@ const SHEETS=[
   const typeOf=v=>/^rebuild/i.test(v||"")?"Rebuildable Inventory":"Capital";
   const agRows=a&&X.rowsBy("ag",["Organization","Asset Group"]).get(k(o,a));
   if(agRows){const t=typeOf(X.map("ag",["Organization","Asset Group"],"Asset Type").get(k(o,a)));if(t!==typeOf(g("Asset Type")))P("Asset Type","e",`"${a}" is ${t} on Asset Group, but this asset is ${typeOf(g("Asset Type"))}`,"Asset type doesn't match its asset group",null,{s:"ag",rows:agRows})}
-  if(a&&c&&X.set("ca",["Organization","Asset Group"]).has(k(o,a))&&!X.set("ca",["Organization","Asset Group","Category"]).has(k(o,a,c)))P("Asset Category","w",`Category "${c}" isn't assigned to asset group "${a}" on Category Assignment`,"Asset category not assigned to its asset group",{s:"ca",v:{Organization:o,"Asset Group":a,Category:c}});
+  // Oracle rejects an asset whose category isn't assigned to its asset group ("Invalid Asset Category"). DataFlow
+  // edition: the assignment must be on Category Assignment or in Oracle. Standalone: only when the group has rows there.
+  if(a&&c&&!X.set("ca",["Organization","Asset Group","Category"]).has(k(o,a,c))){const fix={s:"ca",v:{Organization:o,"Asset Group":a,Category:c}};
+    if(DF_HOST){const st=dfState("ca",["Organization","Asset Group","Category"],[o,a,c]);
+      if(st!=="y")P("Asset Category",st==="?"?"w":"e",`Category "${c}" isn't assigned to asset group "${a}" on Category Assignment${st==="?"?" (checking Oracle…)":" or in Oracle"}`,"Asset category not assigned to its asset group"+(st==="?"?" (checking Oracle)":""),fix)}
+    else if(X.set("ca",["Organization","Asset Group"]).has(k(o,a)))P("Asset Category","w",`Category "${c}" isn't assigned to asset group "${a}" on Category Assignment`,"Asset category not assigned to its asset group",fix)}
   if(g("Parent Asset Number")&&g("Parent Asset Number")===g("Asset Number"))P("Parent Asset Number","e","An asset can't be its own parent","Asset is its own parent");
   else if(g("Parent Asset Number")&&g("Asset Number")){
     // Walk up the parents (same org): coming back to this asset means the chain is a circle, and no asset in it can load first.
@@ -984,7 +992,8 @@ function renderSummary(){
   const D=summaryData(),el=$("summary");const pct=D.T.rows-D.T.flag?Math.round(100*D.T.ready/(D.T.rows-D.T.flag)):0;
   if(!D.T.rows){el.innerHTML=`<p class="muted" style="font-size:14px">No rows yet. Import a workbook or start on 1. Area, and the findings show up here.</p><button class="btn sm" id="sumFresh">Start fresh</button>`;$("sumFresh").onclick=startFresh;return}
   let h=`<div class="kpis"><div class="kpi"><b>${nfmt(D.T.rows)}</b><span>rows across ${D.sheets.length} sheets</span></div><div class="kpi ok"><b>${pct}%</b><span>${nfmt(D.T.ready)} rows ready to load</span></div><div class="kpi e"><b>${nfmt(D.T.err)}</b><span>rows with errors</span></div><div class="kpi w"><b>${nfmt(D.T.warn)}</b><span>ready, with warnings</span></div><div class="kpi"><b>${nfmt(D.T.flag)}</b><span>marked already in Oracle</span></div></div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" id="sumCopy">Copy summary as text</button><button class="btn sm" id="sumAsk">Ask for a written summary</button><button class="btn sm" id="sumLog">Export issue log</button><button class="btn sm" id="sumFresh">Start fresh</button></div>`;
+  <div style="display:flex;gap:8px;flex-wrap:wrap">${DF_HOST?`<button class="btn sm pri" id="sumOra" title="Looks every row and every code up in Oracle (read-only), marks rows already there, and lists what is missing and what has to be loaded first">Check workbook against Oracle</button>`:""}<button class="btn sm" id="sumCopy">Copy summary as text</button><button class="btn sm" id="sumAsk">Ask for a written summary</button><button class="btn sm" id="sumLog">Export issue log</button><button class="btn sm" id="sumFresh">Start fresh</button></div>`;
+  h+=planHtml();
   if(D.miss.length){h+=`<div class="sumsec">Missing parent records<small>Rows point at records that aren't on the parent sheet or marked as already in Oracle. These block the most rows, so fill them first.</small></div><table class="stab"><colgroup><col style="width:21%"><col style="width:13%"><col style="width:13%"><col></colgroup><tr><th>Parent sheet</th><th class="n">Missing values</th><th class="n">Rows affected</th><th>Referenced from</th></tr>${D.miss.map(m=>`<tr class="go" data-go="${m.sh.id}"><td class="nm" title="${esc(m.sh.name)}">${m.sh.no}. ${esc(m.sh.name)}</td><td class="n">${nfmt(m.values)}</td><td class="n">${nfmt(m.rows)}</td><td class="tw">${esc(m.from.join(", "))}</td></tr>`).join("")}</table>`}
   h+=`<div class="sumsec">Load readiness by sheet<small>In load order. Ready means no errors; warnings don't block. Select a row to open the sheet.</small></div><table class="stab"><colgroup><col style="width:21%"><col style="width:7%"><col style="width:7%"><col style="width:7%"><col style="width:8.5%"><col style="width:8.5%"><col style="width:9%"><col></colgroup><tr><th>Sheet</th><th class="n">Rows</th><th class="n">Ready</th><th class="n">Errors</th><th class="n">Warnings</th><th class="n">In Oracle</th><th>Status</th><th>Biggest issue</th></tr>`;
   for(const x of D.sheets){const base=x.n||1;h+=`<tr class="go" data-go="${x.sh.id}"><td class="nm" title="${esc(x.sh.name)}">${x.sh.no}. ${esc(x.sh.name)}</td><td class="n">${nfmt(x.n)}</td><td class="n">${nfmt(x.ready)}</td><td class="n" style="color:var(--err)">${x.err?nfmt(x.err):""}</td><td class="n" style="color:var(--warn)">${x.warn?nfmt(x.warn):""}</td><td class="n">${x.flag?nfmt(x.flag):""}</td><td><div class="bar" title="ready / warnings / errors"><i class="bo" style="width:${100*(x.ready-x.warn)/base}%"></i><i class="bw" style="width:${100*x.warn/base}%"></i><i class="be" style="width:${100*x.err/base}%"></i></div></td><td class="tw">${x.top?`${x.top.sev==="e"?"Error":"Warning"}: ${esc(x.top.label)} (${nfmt(new Set(x.top.rows).size)})`:"None"}</td></tr>`}
@@ -996,6 +1005,8 @@ function renderSummary(){
   el.querySelectorAll("[data-go]").forEach(tr=>tr.onclick=()=>openSheet(tr.dataset.go));
   el.querySelectorAll("[data-iss]").forEach(tr=>tr.onclick=()=>{const x=D.issues[+tr.dataset.iss];showRows(x.sh.id,x.g.rows,x.g.label)});
   $("sumCopy").onclick=()=>copyPlain(summaryText(D));
+  if($("sumOra"))$("sumOra").onclick=dfReadiness;
+  el.querySelectorAll("[data-first]").forEach(tr=>tr.onclick=()=>{const f=DF_PLAN.first[+tr.dataset.first];showRows(f.sh.id,[f.d],"Load first")});
   $("sumLog").onclick=()=>doExport("iss",false);$("sumFresh").onclick=startFresh;
   $("sumAsk").onclick=()=>{if(!$("wrap").classList.contains("chatting"))openChat();sendChat("Write a short findings summary for a manager: what's ready, what's blocking the load, and the top three fixes in order. Use these numbers and check any sheet you need.\n\n"+summaryText(D))};
 }
@@ -1093,19 +1104,34 @@ function dfPostSchemas(){try{dfPost({type:"sheet-schemas",sheets:SHEETS.map(sh=>
   catch(e){console.error("DataFlow: couldn't post sheet schemas",e)}}
 // References found in Oracle (sheet id -> Set of keys), and keys already asked about (key -> "?" pending | "n" not found).
 const DF_KNOWN=new Map(),DF_ASKED=new Map();let dfLookupQ=new Map(),dfLookupT=0,dfLookupErr=false;
+// A sheet can be asked by different key columns (Category Assignment: org + group + category, or org + group), so
+// the queue is per sheet and key columns, and each posted request remembers its keys: DataFlow answers a sheet's
+// requests in the order they were sent (dfSent), and an answer settles only the keys of its own request.
+const dfSent=new Map();
 function dfQueueLookup(sid,fields,vals,kk){let a=DF_ASKED.get(sid);if(!a){a=new Map();DF_ASKED.set(sid,a)}a.set(kk,"?");
-  let q=dfLookupQ.get(sid);if(!q){q={fields,rows:new Map()};dfLookupQ.set(sid,q)}q.rows.set(kk,vals);
+  const qk=sid+SEP+fields.join(SEP);let q=dfLookupQ.get(qk);if(!q){q={sid,fields,rows:new Map()};dfLookupQ.set(qk,q)}q.rows.set(kk,vals);
   clearTimeout(dfLookupT);dfLookupT=setTimeout(dfFlushLookup,300)}
+// One request per sheet is out at a time (the answer names only the sheet), the rest wait their turn.
+function dfSendLookup(sid,fields,rows,done){const name=BYID[sid].name;let s=dfSent.get(name);if(!s){s=[];dfSent.set(name,s)}
+  s.push({kks:rows.map(v=>v.join(SEP)),done,msg:{type:"lookup-oracle",sheet:name,headers:fields,rows,sourceRows:rows.map((_,j)=>j)}});
+  if(s.length===1)dfPost(s[0].msg)}
 function dfFlushLookup(){const q=dfLookupQ;dfLookupQ=new Map();
-  for(const [sid,{fields,rows}] of q){const all=[...rows.values()];
-    for(let i=0;i<all.length;i+=5000){const part=all.slice(i,i+5000);dfPost({type:"lookup-oracle",sheet:BYID[sid].name,headers:fields,rows:part,sourceRows:part.map((_,j)=>j)})}}}
-function dfLookupResult(m){const sh=SHEETS.find(x=>x.name===m.sheet);if(!sh)return;const a=DF_ASKED.get(sh.id)||new Map();
-  if(m.error){for(const [k,v] of a)if(v==="?")a.set(k,"n");
-    if(!dfLookupErr&&!/No DataFlow recipe/.test(m.error)){dfLookupErr=true;toast("Couldn't check references in Oracle: "+m.error)}}
+  for(const {sid,fields,rows} of q.values()){const all=[...rows.values()];
+    for(let i=0;i<all.length;i+=5000)dfSendLookup(sid,fields,all.slice(i,i+5000))}}
+function dfLookupResult(m){const sh=SHEETS.find(x=>x.name===m.sheet);if(!sh)return;
+  let a=DF_ASKED.get(sh.id);if(!a){a=new Map();DF_ASKED.set(sh.id,a)}
+  const sent=dfSent.get(m.sheet)||[],req=sent.shift();if(sent.length)dfPost(sent[0].msg);
+  const mine=req?req.kks:[...a.keys()].filter(k=>a.get(k)==="?");
+  if(m.error){for(const k of mine)a.set(k,"n");
+    if(!req||!req.done){if(!dfLookupErr&&!/No DataFlow recipe|No Oracle check/.test(m.error)){dfLookupErr=true;toast("Couldn't check references in Oracle: "+m.error)}}}
   else{let kn=DF_KNOWN.get(sh.id);if(!kn){kn=new Set();DF_KNOWN.set(sh.id,kn)}
     for(const row of m.found||[]){const kk=row.join(SEP);kn.add(kk);a.set(kk,"y")}
-    for(const [k,v] of a)if(v==="?")a.set(k,"n")}
+    for(const k of mine)if(a.get(k)!=="y")a.set(k,"n")}
+  if(req&&req.done){req.done(m.error?{error:m.error}:{found:new Set((m.found||[]).map(r=>r.join(SEP)))});return}
   validateAll();refresh()}
+// Is this key in Oracle? "y" yes, "n" no, "?" asked, answer on its way. The standalone edition has no connection: "n".
+function dfState(sid,fields,vals){if(!DF_HOST)return "n";const kk=vals.join(SEP),kn=DF_KNOWN.get(sid);if(kn&&kn.has(kk))return "y";
+  const a=DF_ASKED.get(sid);if(!a||!a.has(kk)){dfQueueLookup(sid,fields,vals,kk);return "?"}return a.get(kk)==="?"?"?":"n"}
 function dfRows(sh,pick){const cols=outCols(sh,true),val=(d,[f,i])=>String(outVal(f,S.data[sh.id][d][i]||""));
   return {sheet:sh.name,headers:cols.map(([f])=>f.n),rows:pick.map(d=>cols.map(c=>val(d,c))),sourceRows:pick}}
 // Mark rows Already in Oracle, but only rows that still hold the key DataFlow saw (the sheet may have changed meanwhile).
@@ -1166,6 +1192,73 @@ async function dfCheckOracle(){const sh=BYID[S.active];if(!sh||sh.list){toast("O
   if(!pick.length){toast("Every row on this sheet is already marked Already in Oracle.");return}
   dfPost(Object.assign({type:"check-oracle"},dfRows(sh,pick)));
   toast(`Checking ${pick.length} row${pick.length>1?"s":""} in Oracle…`)}
+/* ---- Check workbook against Oracle: what is already there, what is missing, what has to load first ---- */
+let DF_PLAN=null;
+// The key columns DataFlow may know a sheet by: its first key, then the keys other sheets refer to it by.
+function dfOwnKeys(sh){const out=[],add=f=>{if(f&&f.length&&!out.some(x=>x.join(SEP)===f.join(SEP)))out.push(f)};
+  const k0=(sh.keys||[])[0];add(Array.isArray(k0)?k0:(k0&&k0.f));
+  for(const s2 of SHEETS)for(const fl of s2.fields)for(const alt of [...(fl.ref?(fl.ref.any||[fl.ref]):[]),...(fl.also||[])])if(alt.s===sh.id)add(alt.m.map(p=>p[0]));
+  return out}
+const dfAsk=(sid,fields,rows)=>new Promise(res=>{let done=false;const fin=v=>{if(!done){done=true;res(v)}};
+  dfSendLookup(sid,fields,rows,fin);
+  // No answer: give up on this request and let the sheet's next one go.
+  setTimeout(()=>{if(done)return;const s=dfSent.get(BYID[sid].name)||[],i=s.findIndex(e=>e.done===fin);if(i>=0){s.splice(i,1);if(i===0&&s.length)dfPost(s[0].msg)}
+    fin({error:"DataFlow didn't answer"})},60000)});
+const dfWaiting=()=>dfLookupQ.size>0||[...DF_ASKED.values()].some(a=>[...a.values()].includes("?"));
+async function dfReadiness(){
+  if(!DF_HOST){toast("The Oracle check runs in DataFlow's Build page.");return}
+  if(editing)commitEdit();
+  toast("Checking the workbook against Oracle…");
+  DF_KNOWN.clear();DF_ASKED.clear();dfLookupErr=false;          // a fresh look: records loaded since the last check are seen
+  const X=buildCtx(),checked=new Map(),marks=[];
+  // 1. Which rows are already in Oracle (sheets DataFlow has an existence check for).
+  for(const sh of SHEETS){const data=S.data[sh.id],pick=[];
+    data.forEach((row,d)=>{if(!isBlank(row)&&!isFlag(sh,row))pick.push(d)});
+    if(!pick.length){checked.set(sh.id,data.some(r=>!isBlank(r))?"all marked":"");continue}
+    // Every key the sheet is known by is tried (Category: its segments, and the Category Code other sheets use):
+    // a row found by any of them is in Oracle.
+    let state="no";const hit=new Set();
+    for(const fields of dfOwnKeys(sh)){const rows=pick.map(d=>fields.map(X.getter(sh,data[d]))),ask=rows.filter(v=>v.every(x=>x));
+      if(!ask.length)continue;
+      let err=null;const found=new Set();
+      for(let i=0;i<ask.length&&!err;i+=5000){const r=await dfAsk(sh.id,fields,ask.slice(i,i+5000));if(r.error)err=r.error;else r.found.forEach(x=>found.add(x))}
+      if(err){if(state==="no"&&!/No Oracle check|No DataFlow recipe/.test(err))state="error: "+err;continue}
+      state="yes";pick.forEach((d,i)=>{if(found.has(rows[i].join(SEP)))hit.add(d)})}
+    if(sh.ix[FLAG]!=null)for(const d of hit)marks.push([sh.id,d]);
+    checked.set(sh.id,state)}
+  if(marks.length){snapshot([...new Set(marks.map(m=>m[0]))],"Check workbook against Oracle");for(const [sid,d] of marks)S.data[sid][d][BYID[sid].ix[FLAG]]="Y"}
+  // 2. References and links: validation asks Oracle about everything that isn't on its parent sheet; wait for the answers.
+  changed();
+  for(let i=0;i<300&&dfWaiting();i++)await new Promise(r=>setTimeout(r,200));
+  validateAll();
+  // 3. The plan.
+  DF_PLAN=readinessPlan(checked,marks.length);
+  openSheet("_summary");
+  const te=DF_PLAN.sheets.reduce((a,x)=>a+x.err,0);
+  toast(`Oracle check done: ${nfmt(marks.length)} row${marks.length===1?"":"s"} newly marked Already in Oracle, ${nfmt(te)} row${te===1?"":"s"} with errors, ${nfmt(DF_PLAN.first.length)} to load first.`)}
+// Per sheet (load order): rows in Oracle, to load, with errors, and the rows later sheets wait for ("load first"):
+// a row that is not in Oracle and that another row not in Oracle refers to.
+function readinessPlan(checked,marked){const X=buildCtx(),need=new Map(),sheets=[];
+  for(const sh of SHEETS)S.data[sh.id].forEach((row,d)=>{if(isBlank(row)||isFlag(sh,row))return;const g=X.getter(sh,row);
+    for(const fl of sh.fields){const alts=[...(fl.ref&&(!fl.ref.when||fl.ref.when(g))?(fl.ref.any||[fl.ref]):[]),...(fl.also||[])];
+      for(const alt of alts){if(alt.when&&!alt.when(g))continue;const vals=alt.m.map(p=>g(p[1]));if(vals.some(v=>!v))continue;const P=BYID[alt.s];
+        for(const pd of X.rowsBy(alt.s,alt.m.map(p=>p[0])).get(vals.join(SEP))||[]){if((alt.s===sh.id&&pd===d)||isFlag(P,S.data[alt.s][pd]))continue;
+          const key=alt.s+SEP+pd;let n=need.get(key);if(!n){n={sid:alt.s,d:pd,from:new Map()};need.set(key,n)}n.from.set(sh.name,(n.from.get(sh.name)||0)+1)}}}});
+  const first=[...need.values()].map(n=>{const P=BYID[n.sid],g=X.getter(P,S.data[n.sid][n.d]),kf=dfOwnKeys(P)[0]||[P.fields[0].n];
+    return {sh:P,d:n.d,key:kf.map(g).filter(Boolean).join(" / "),by:[...n.from].map(([s,c])=>`${s}: ${c} row${c===1?"":"s"}`).join("; ")}})
+    .sort((a,b)=>SHEETS.indexOf(a.sh)-SHEETS.indexOf(b.sh)||a.d-b.d);
+  for(const sh of SHEETS){const res=V[sh.id];if(!res.n)continue;let err=0;for(const [d,ri] of res.rows)if(ri.sev==="e"&&!isFlag(sh,S.data[sh.id][d]))err++;
+    sheets.push({sh,inOra:res.nx,toLoad:res.n-res.nx,err,first:first.filter(f=>f.sh===sh).length,checked:checked.get(sh.id)||""})}
+  const lists=LISTS.filter(L=>L.list!=="abbr"&&!S.data[L.id].some(r=>!isBlank(r))).map(L=>L.name);
+  return {at:new Date(),marked,sheets,first,lists}}
+const planChecked=x=>x.checked==="yes"?"Yes":x.checked==="no"?"No Oracle check for this sheet yet":x.checked==="all marked"?"All rows already marked":x.checked||"";
+function planHtml(){const P=DF_PLAN;if(!P)return "";
+  let h=`<div class="sumsec">Oracle readiness: load plan<small>Checked against Oracle at ${pad(P.at.getHours())}:${pad(P.at.getMinutes())}${P.marked?`; ${nfmt(P.marked)} row${P.marked===1?"":"s"} newly marked Already in Oracle`:""}. Sheets in load order. Errors (missing codes, categories not assigned, and so on) are listed under Top issues. Run the check again after changes or loads.</small></div><table class="stab"><colgroup><col style="width:21%"><col style="width:23%"><col style="width:13%"><col style="width:10%"><col style="width:12%"><col></colgroup><tr><th>Sheet</th><th>Checked in Oracle</th><th class="n">Already in Oracle</th><th class="n">To load</th><th class="n">With errors</th><th class="n">Later rows wait for</th></tr>`;
+  for(const x of P.sheets)h+=`<tr class="go" data-go="${x.sh.id}"><td class="nm" title="${esc(x.sh.name)}">${x.sh.no}. ${esc(x.sh.name)}</td><td class="tw">${esc(planChecked(x))}</td><td class="n">${x.inOra?nfmt(x.inOra):""}</td><td class="n">${x.toLoad?nfmt(x.toLoad):""}</td><td class="n" style="color:var(--err)">${x.err?nfmt(x.err):""}</td><td class="n">${x.first?nfmt(x.first):""}</td></tr>`;
+  h+=`</table>`;
+  if(P.first.length)h+=`<div class="sumsec">Load first<small>Rows that are not in Oracle yet and that other rows refer to. Load them, in this order, before the rows that need them. Select one to open it.</small></div><table class="stab"><colgroup><col style="width:21%"><col style="width:7%"><col style="width:30%"><col></colgroup><tr><th>Sheet</th><th class="n">Row</th><th>Record</th><th>Needed by</th></tr>${P.first.slice(0,200).map((f,i)=>`<tr class="go" data-first="${i}"><td class="nm">${f.sh.no}. ${esc(f.sh.name)}</td><td class="n">${f.d+1}</td><td class="tw">${esc(f.key)}</td><td class="tw">${esc(f.by)}</td></tr>`).join("")}</table>${P.first.length>200?`<p class="muted">${nfmt(P.first.length-200)} more in the exported issue log.</p>`:""}`;
+  if(P.lists.length)h+=`<p class="muted" style="font-size:13px">Not checked: these reference lists are empty, so their columns aren't checked: ${esc(P.lists.join(", "))}. Fill them with Reference lists &gt; Fill lists from Oracle.</p>`;
+  return h}
 // Update selected: the columns that find the record — the sheet's first key without Organization, else its first
 // required column other than Organization (the same default DataFlow's recipe wizard uses). Column indexes.
 function dfKeyCols(sh){const k0=(sh.keys||[])[0],names=(Array.isArray(k0)?k0:(k0&&k0.f)||[]).filter(n=>n!=="Organization");
@@ -1627,6 +1720,8 @@ function doExport(mode,excl){
     for(const sh of ALL){const res=V[sh.id];for(const [r,ri] of [...res.rows.entries()].sort((a,b)=>a[0]-b[0])){for(const [c,ce] of ri.cells)for(const m of ce.msgs)aoa.push([sh.no||"List",sh.name,r+1,sh.fields[c].n,m[0]==="e"?"Error":"Warning",m[1]]);for(const m of ri.msgs)aoa.push([sh.no||"List",sh.name,r+1,"",m[0]==="e"?"Error":"Warning",m[1]])}}
     count=aoa.length-1;const sws=XLSX.utils.aoa_to_sheet(summaryText(summaryData()).split("\n").map(l=>[l]));sws["!cols"]=[{wch:120}];XLSX.utils.book_append_sheet(wb,sws,"Summary");
     const ws=XLSX.utils.aoa_to_sheet(aoa);ws["!cols"]=[{wch:10},{wch:26},{wch:8},{wch:26},{wch:10},{wch:90}];XLSX.utils.book_append_sheet(wb,ws,"Issues");
+    if(DF_PLAN){const P=DF_PLAN;const p1=XLSX.utils.aoa_to_sheet([["Load order","Sheet","Checked in Oracle","Already in Oracle","To load","With errors","Later rows wait for"],...P.sheets.map(x=>[x.sh.no,x.sh.name,planChecked(x),x.inOra,x.toLoad,x.err,x.first])]);p1["!cols"]=[{wch:10},{wch:28},{wch:34},{wch:16},{wch:9},{wch:11},{wch:18}];XLSX.utils.book_append_sheet(wb,p1,"Load plan");
+      const p2=XLSX.utils.aoa_to_sheet([["Load order","Sheet","Row","Record","Needed by"],...P.first.map(f=>[f.sh.no,f.sh.name,f.d+1,f.key,f.by])]);p2["!cols"]=[{wch:10},{wch:28},{wch:7},{wch:44},{wch:70}];XLSX.utils.book_append_sheet(wb,p2,"Load first")}
     saveFile("eAM_issue_log_"+stamp()+".xlsx",new Blob([XLSX.write(wb,{bookType:"xlsx",type:"array"})],{type:"application/octet-stream"}));return}
   const loader=mode==="load";
   // The working workbook carries every sheet and list tab, empty ones too (header rows only), so it doubles as the
