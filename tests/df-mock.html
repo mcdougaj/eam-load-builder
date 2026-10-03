@@ -10,8 +10,8 @@ window.MOCK={oracle:{},noCheck:[],log:[],delay:20};
     window.chrome=window.chrome||{};window.chrome.webview={addEventListener:(t,f)=>L.push(f),
       postMessage:m=>{MOCK.log.push(m);const send=d=>setTimeout(()=>L.forEach(f=>f({data:d})),MOCK.delay);
         if(m.type==="workbook-open")send({type:"workbook-data",name:"Mock",state:MOCK.state||null});
-        else if(m.type==="lookup-oracle"){if(MOCK.noCheck.includes(m.sheet))send({type:"lookup-result",sheet:m.sheet,found:[],error:'No Oracle check for "'+m.sheet+'".'});
-          else{const have=new Set((MOCK.oracle[m.sheet]||[]).map(r=>r.join("\u0001")));send({type:"lookup-result",sheet:m.sheet,found:m.rows.filter(r=>have.has(r.join("\u0001"))),error:null})}}}}})()<\/script>`;
+        else if(m.type==="lookup-oracle"){if(MOCK.noCheck.includes(m.sheet))send({type:"lookup-result",id:MOCK.echoId===false?undefined:m.id,sheet:m.sheet,found:[],error:'No Oracle check for "'+m.sheet+'".'});
+          else{const have=new Set((MOCK.oracle[m.sheet]||[]).map(r=>r.join("\u0001")));send({type:"lookup-result",id:MOCK.echoId===false?undefined:m.id,sheet:m.sheet,found:m.rows.filter(r=>have.has(r.join("\u0001"))),error:null})}}}}})()<\/script>`;
   const i=html.indexOf("<script");
   document.open();document.write(`<base href="../"><script>window.MOCK=${JSON.stringify(window.MOCK)};<\/script>`+html.slice(0,i)+host+html.slice(i));document.close();
 })();

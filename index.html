@@ -256,6 +256,7 @@ button{cursor:pointer}
       <button class="btn sm pri" id="bLoadDF" title="Send the selected rows to DataFlow's Load workspace">▶ Load selected</button>
       <button class="btn sm" id="bUpdateDF" title="Change existing Oracle records with an update recipe">▶ Update selected</button>
       <button class="btn sm" id="bCheckDF" title="Ask DataFlow which rows on this sheet are already in Oracle and mark them Already in Oracle (read-only — nothing is changed in Oracle)">✓ Check Oracle</button>
+      <button class="btn sm" id="bCheckAllDF" title="Check the whole workbook against Oracle (read-only): marks rows already there, lists missing codes and links, and what has to be loaded first">Check workbook</button>
       <span class="sep"></span>
       <label class="chk"><select id="fView" class="btn sm"><option value="all">All rows</option><option value="issues">Rows with issues</option><option value="errors">Rows with errors</option></select></label>
       <span class="muted" id="rowcount" style="font-size:13px"></span>
@@ -339,8 +340,8 @@ const SHEETS=[
   // Oracle rejects an asset whose category isn't assigned to its asset group ("Invalid Asset Category"). DataFlow
   // edition: the assignment must be on Category Assignment or in Oracle. Standalone: only when the group has rows there.
   if(a&&c&&!X.set("ca",["Organization","Asset Group","Category"]).has(k(o,a,c))){const fix={s:"ca",v:{Organization:o,"Asset Group":a,Category:c}};
-    if(DF_HOST){const st=dfState("ca",["Organization","Asset Group","Category"],[o,a,c]);
-      if(st!=="y")P("Asset Category",st==="?"?"w":"e",`Category "${c}" isn't assigned to asset group "${a}" on Category Assignment${st==="?"?" (checking Oracle…)":" or in Oracle"}`,"Asset category not assigned to its asset group"+(st==="?"?" (checking Oracle)":""),fix)}
+    const st=DF_HOST?dfState("ca",["Organization","Asset Group","Category"],[o,a,c]):"x";   // "x": Oracle can't be asked
+    if(st!=="x"){if(st!=="y")P("Asset Category",st==="?"?"w":"e",`Category "${c}" isn't assigned to asset group "${a}" on Category Assignment${st==="?"?" (checking Oracle…)":" or in Oracle"}`,"Asset category not assigned to its asset group"+(st==="?"?" (checking Oracle)":""),fix)}
     else if(X.set("ca",["Organization","Asset Group"]).has(k(o,a)))P("Asset Category","w",`Category "${c}" isn't assigned to asset group "${a}" on Category Assignment`,"Asset category not assigned to its asset group",fix)}
   if(g("Parent Asset Number")&&g("Parent Asset Number")===g("Asset Number"))P("Parent Asset Number","e","An asset can't be its own parent","Asset is its own parent");
   else if(g("Parent Asset Number")&&g("Asset Number")){
@@ -1111,27 +1112,34 @@ const dfSent=new Map();
 function dfQueueLookup(sid,fields,vals,kk){let a=DF_ASKED.get(sid);if(!a){a=new Map();DF_ASKED.set(sid,a)}a.set(kk,"?");
   const qk=sid+SEP+fields.join(SEP);let q=dfLookupQ.get(qk);if(!q){q={sid,fields,rows:new Map()};dfLookupQ.set(qk,q)}q.rows.set(kk,vals);
   clearTimeout(dfLookupT);dfLookupT=setTimeout(dfFlushLookup,300)}
-// One request per sheet is out at a time (the answer names only the sheet), the rest wait their turn.
+// One request per sheet is out at a time, the rest wait their turn. Each request carries an id that DataFlow echoes,
+// so an answer settles exactly its own request (an older DataFlow echoes none: then the oldest request is taken).
+// A request that gets no answer in 5.5 minutes (DataFlow gives Oracle 5) is given up: its keys become "x" (not checked).
+let dfReqId=0;
 function dfSendLookup(sid,fields,rows,done){const name=BYID[sid].name;let s=dfSent.get(name);if(!s){s=[];dfSent.set(name,s)}
-  s.push({kks:rows.map(v=>v.join(SEP)),done,msg:{type:"lookup-oracle",sheet:name,headers:fields,rows,sourceRows:rows.map((_,j)=>j)}});
-  if(s.length===1)dfPost(s[0].msg)}
+  const req={id:"q"+(++dfReqId),sid,kks:rows.map(v=>v.join(SEP)),done};
+  req.msg={type:"lookup-oracle",id:req.id,sheet:name,headers:fields,rows,sourceRows:rows.map((_,j)=>j)};
+  req.timer=setTimeout(()=>dfSettle(name,req,{error:"DataFlow didn't answer"}),330000);
+  s.push(req);if(s.length===1)dfPost(req.msg)}
 function dfFlushLookup(){const q=dfLookupQ;dfLookupQ=new Map();
   for(const {sid,fields,rows} of q.values()){const all=[...rows.values()];
     for(let i=0;i<all.length;i+=5000)dfSendLookup(sid,fields,all.slice(i,i+5000))}}
-function dfLookupResult(m){const sh=SHEETS.find(x=>x.name===m.sheet);if(!sh)return;
-  let a=DF_ASKED.get(sh.id);if(!a){a=new Map();DF_ASKED.set(sh.id,a)}
-  const sent=dfSent.get(m.sheet)||[],req=sent.shift();if(sent.length)dfPost(sent[0].msg);
-  const mine=req?req.kks:[...a.keys()].filter(k=>a.get(k)==="?");
-  if(m.error){for(const k of mine)a.set(k,"n");
-    if(!req||!req.done){if(!dfLookupErr&&!/No DataFlow recipe|No Oracle check/.test(m.error)){dfLookupErr=true;toast("Couldn't check references in Oracle: "+m.error)}}}
-  else{let kn=DF_KNOWN.get(sh.id);if(!kn){kn=new Set();DF_KNOWN.set(sh.id,kn)}
+// Settles one request: found keys "y", the rest "n", or all "x" when Oracle couldn't be asked; then the sheet's next request goes.
+function dfSettle(name,req,m){const s=dfSent.get(name)||[],at=s.indexOf(req);if(at<0)return;clearTimeout(req.timer);s.splice(at,1);if(at===0&&s.length)dfPost(s[0].msg);
+  let a=DF_ASKED.get(req.sid);if(!a){a=new Map();DF_ASKED.set(req.sid,a)}
+  if(m.error){for(const k of req.kks)if(a.get(k)!=="y")a.set(k,"x");
+    if(!req.done&&!dfLookupErr&&!/No DataFlow recipe|No Oracle check/.test(m.error)){dfLookupErr=true;toast("Couldn't check references in Oracle: "+m.error)}}
+  else{let kn=DF_KNOWN.get(req.sid);if(!kn){kn=new Set();DF_KNOWN.set(req.sid,kn)}
     for(const row of m.found||[]){const kk=row.join(SEP);kn.add(kk);a.set(kk,"y")}
-    for(const k of mine)if(a.get(k)!=="y")a.set(k,"n")}
-  if(req&&req.done){req.done(m.error?{error:m.error}:{found:new Set((m.found||[]).map(r=>r.join(SEP)))});return}
-  validateAll();refresh()}
-// Is this key in Oracle? "y" yes, "n" no, "?" asked, answer on its way. The standalone edition has no connection: "n".
+    for(const k of req.kks)if(a.get(k)!=="y")a.set(k,"n")}
+  if(req.done)req.done(m.error?{error:m.error}:{found:new Set((m.found||[]).map(r=>r.join(SEP)))});else{validateAll();refresh()}}
+function dfLookupResult(m){const s=dfSent.get(m.sheet)||[];
+  // By id when DataFlow echoes one; a late answer to a request already given up matches nothing and is dropped.
+  const req=m.id!=null?s.find(r=>r.id===m.id):s[0];if(req)dfSettle(m.sheet,req,m)}
+// Is this key in Oracle? "y" yes, "n" no, "?" asked, answer on its way, "x" Oracle could not be asked (no connection, no
+// check for the sheet, no answer). The standalone edition has no connection: "n".
 function dfState(sid,fields,vals){if(!DF_HOST)return "n";const kk=vals.join(SEP),kn=DF_KNOWN.get(sid);if(kn&&kn.has(kk))return "y";
-  const a=DF_ASKED.get(sid);if(!a||!a.has(kk)){dfQueueLookup(sid,fields,vals,kk);return "?"}return a.get(kk)==="?"?"?":"n"}
+  const a=DF_ASKED.get(sid);if(!a||!a.has(kk)){dfQueueLookup(sid,fields,vals,kk);return "?"}return a.get(kk)}
 function dfRows(sh,pick){const cols=outCols(sh,true),val=(d,[f,i])=>String(outVal(f,S.data[sh.id][d][i]||""));
   return {sheet:sh.name,headers:cols.map(([f])=>f.n),rows:pick.map(d=>cols.map(c=>val(d,c))),sourceRows:pick}}
 // Mark rows Already in Oracle, but only rows that still hold the key DataFlow saw (the sheet may have changed meanwhile).
@@ -1194,48 +1202,53 @@ async function dfCheckOracle(){const sh=BYID[S.active];if(!sh||sh.list){toast("O
   toast(`Checking ${pick.length} row${pick.length>1?"s":""} in Oracle…`)}
 /* ---- Check workbook against Oracle: what is already there, what is missing, what has to load first ---- */
 let DF_PLAN=null;
-// The key columns DataFlow may know a sheet by: its first key, then the keys other sheets refer to it by.
-function dfOwnKeys(sh){const out=[],add=f=>{if(f&&f.length&&!out.some(x=>x.join(SEP)===f.join(SEP)))out.push(f)};
-  const k0=(sh.keys||[])[0];add(Array.isArray(k0)?k0:(k0&&k0.f));
-  for(const s2 of SHEETS)for(const fl of s2.fields)for(const alt of [...(fl.ref?(fl.ref.any||[fl.ref]):[]),...(fl.also||[])])if(alt.s===sh.id)add(alt.m.map(p=>p[0]));
+// The key columns that identify a row of the sheet in Oracle: its first key, and a key other sheets use for it only when
+// that key names the same record (Category: the derived Category Code stands for both segments). A narrower key (Asset
+// Group without Organization) is never used here: it would mark a row that exists only in another organization.
+function dfRowKeys(sh){const k0=(sh.keys||[])[0],own=Array.isArray(k0)?k0:(k0&&k0.f)||[],out=own.length?[own]:[];
+  const add=f=>{if(!out.some(x=>x.join(SEP)===f.join(SEP)))out.push(f)},der=n=>!!(sh.derive&&sh.derive[n]);
+  for(const s2 of SHEETS)for(const fl of s2.fields)for(const alt of [...(fl.ref?(fl.ref.any||[fl.ref]):[]),...(fl.also||[])]){if(alt.s!==sh.id)continue;
+    const rk=alt.m.map(p=>p[0]);if(rk.every(n=>own.includes(n)||der(n))&&(own.every(n=>rk.includes(n))||rk.some(der)))add(rk)}
   return out}
-const dfAsk=(sid,fields,rows)=>new Promise(res=>{let done=false;const fin=v=>{if(!done){done=true;res(v)}};
-  dfSendLookup(sid,fields,rows,fin);
-  // No answer: give up on this request and let the sheet's next one go.
-  setTimeout(()=>{if(done)return;const s=dfSent.get(BYID[sid].name)||[],i=s.findIndex(e=>e.done===fin);if(i>=0){s.splice(i,1);if(i===0&&s.length)dfPost(s[0].msg)}
-    fin({error:"DataFlow didn't answer"})},60000)});
+const dfAsk=(sid,fields,rows)=>new Promise(res=>dfSendLookup(sid,fields,rows,res));
 const dfWaiting=()=>dfLookupQ.size>0||[...DF_ASKED.values()].some(a=>[...a.values()].includes("?"));
+let dfChecking=false;
 async function dfReadiness(){
   if(!DF_HOST){toast("The Oracle check runs in DataFlow's Build page.");return}
+  if(dfChecking){toast("The Oracle check is still running.");return}
   if(editing)commitEdit();
-  toast("Checking the workbook against Oracle…");
-  DF_KNOWN.clear();DF_ASKED.clear();dfLookupErr=false;          // a fresh look: records loaded since the last check are seen
-  const X=buildCtx(),checked=new Map(),marks=[];
-  // 1. Which rows are already in Oracle (sheets DataFlow has an existence check for).
-  for(const sh of SHEETS){const data=S.data[sh.id],pick=[];
-    data.forEach((row,d)=>{if(!isBlank(row)&&!isFlag(sh,row))pick.push(d)});
-    if(!pick.length){checked.set(sh.id,data.some(r=>!isBlank(r))?"all marked":"");continue}
-    // Every key the sheet is known by is tried (Category: its segments, and the Category Code other sheets use):
-    // a row found by any of them is in Oracle.
-    let state="no";const hit=new Set();
-    for(const fields of dfOwnKeys(sh)){const rows=pick.map(d=>fields.map(X.getter(sh,data[d]))),ask=rows.filter(v=>v.every(x=>x));
-      if(!ask.length)continue;
-      let err=null;const found=new Set();
-      for(let i=0;i<ask.length&&!err;i+=5000){const r=await dfAsk(sh.id,fields,ask.slice(i,i+5000));if(r.error)err=r.error;else r.found.forEach(x=>found.add(x))}
-      if(err){if(state==="no"&&!/No Oracle check|No DataFlow recipe/.test(err))state="error: "+err;continue}
-      state="yes";pick.forEach((d,i)=>{if(found.has(rows[i].join(SEP)))hit.add(d)})}
-    if(sh.ix[FLAG]!=null)for(const d of hit)marks.push([sh.id,d]);
-    checked.set(sh.id,state)}
-  if(marks.length){snapshot([...new Set(marks.map(m=>m[0]))],"Check workbook against Oracle");for(const [sid,d] of marks)S.data[sid][d][BYID[sid].ix[FLAG]]="Y"}
-  // 2. References and links: validation asks Oracle about everything that isn't on its parent sheet; wait for the answers.
-  changed();
-  for(let i=0;i<300&&dfWaiting();i++)await new Promise(r=>setTimeout(r,200));
-  validateAll();
-  // 3. The plan.
-  DF_PLAN=readinessPlan(checked,marks.length);
-  openSheet("_summary");
-  const te=DF_PLAN.sheets.reduce((a,x)=>a+x.err,0);
-  toast(`Oracle check done: ${nfmt(marks.length)} row${marks.length===1?"":"s"} newly marked Already in Oracle, ${nfmt(te)} row${te===1?"":"s"} with errors, ${nfmt(DF_PLAN.first.length)} to load first.`)}
+  dfChecking=true;toast("Checking the workbook against Oracle…");
+  try{
+    DF_KNOWN.clear();DF_ASKED.clear();dfLookupErr=false;        // a fresh look: records loaded since the last check are seen
+    const checked=new Map(),marks=[];
+    // 1. Which rows are already in Oracle (sheets DataFlow has an existence check for). Each hit remembers the key
+    //    it was found by, and is marked only if the row still holds that key when the answers are in.
+    for(const sh of SHEETS){const X=buildCtx(),data=S.data[sh.id],pick=[];
+      data.forEach((row,d)=>{if(!isBlank(row)&&!isFlag(sh,row))pick.push(d)});
+      if(!pick.length){checked.set(sh.id,data.some(r=>!isBlank(r))?"all marked":"");continue}
+      let state="no";
+      for(const fields of dfRowKeys(sh)){const rows=pick.map(d=>fields.map(X.getter(sh,data[d]))),ask=rows.filter(v=>v.every(x=>x));
+        if(!ask.length)continue;
+        let err=null;const found=new Set();
+        for(let i=0;i<ask.length&&!err;i+=5000){const r=await dfAsk(sh.id,fields,ask.slice(i,i+5000));if(r.error)err=r.error;else r.found.forEach(x=>found.add(x))}
+        if(err&&state==="no"&&!/No Oracle check|No DataFlow recipe/.test(err))state="error: "+err;
+        if(!err)state="yes";
+        if(sh.ix[FLAG]!=null)pick.forEach((d,i)=>{if(found.has(rows[i].join(SEP)))marks.push({sid:sh.id,d,fields,kk:rows[i].join(SEP)})})}
+      checked.set(sh.id,state)}
+    const X2=buildCtx(),ok=marks.filter(m=>{const sh=BYID[m.sid],row=S.data[m.sid][m.d];return row&&!isBlank(row)&&!isFlag(sh,row)&&m.fields.map(X2.getter(sh,row)).join(SEP)===m.kk});
+    const cells=new Map();for(const m of ok)cells.set(m.sid+SEP+m.d,m);
+    if(cells.size){snapshot([...new Set(ok.map(m=>m.sid))],"Check workbook against Oracle");for(const m of cells.values())S.data[m.sid][m.d][BYID[m.sid].ix[FLAG]]="Y"}
+    // 2. References and links: validation asks Oracle about everything that isn't on its parent sheet; wait for the answers.
+    changed();
+    for(let i=0;i<1700&&dfWaiting();i++)await new Promise(r=>setTimeout(r,200));
+    validateAll();
+    // 3. The plan.
+    DF_PLAN=readinessPlan(checked,cells.size);DF_PLAN.waiting=dfWaiting();
+    openSheet("_summary");
+    const te=DF_PLAN.sheets.reduce((a,x)=>a+x.err,0);
+    toast(`Oracle check ${DF_PLAN.waiting?"not complete (some answers are still on their way - run it again)":"done"}: ${nfmt(cells.size)} row${cells.size===1?"":"s"} newly marked Already in Oracle, ${nfmt(te)} row${te===1?"":"s"} with errors, ${nfmt(DF_PLAN.first.length)} to load first.`)}
+  catch(e){console.error(e);toast("The Oracle check stopped: "+(e&&e.message||e))}
+  finally{dfChecking=false}}
 // Per sheet (load order): rows in Oracle, to load, with errors, and the rows later sheets wait for ("load first"):
 // a row that is not in Oracle and that another row not in Oracle refers to.
 function readinessPlan(checked,marked){const X=buildCtx(),need=new Map(),sheets=[];
@@ -1244,7 +1257,7 @@ function readinessPlan(checked,marked){const X=buildCtx(),need=new Map(),sheets=
       for(const alt of alts){if(alt.when&&!alt.when(g))continue;const vals=alt.m.map(p=>g(p[1]));if(vals.some(v=>!v))continue;const P=BYID[alt.s];
         for(const pd of X.rowsBy(alt.s,alt.m.map(p=>p[0])).get(vals.join(SEP))||[]){if((alt.s===sh.id&&pd===d)||isFlag(P,S.data[alt.s][pd]))continue;
           const key=alt.s+SEP+pd;let n=need.get(key);if(!n){n={sid:alt.s,d:pd,from:new Map()};need.set(key,n)}n.from.set(sh.name,(n.from.get(sh.name)||0)+1)}}}});
-  const first=[...need.values()].map(n=>{const P=BYID[n.sid],g=X.getter(P,S.data[n.sid][n.d]),kf=dfOwnKeys(P)[0]||[P.fields[0].n];
+  const first=[...need.values()].map(n=>{const P=BYID[n.sid],g=X.getter(P,S.data[n.sid][n.d]),kf=dfRowKeys(P)[0]||[P.fields[0].n];
     return {sh:P,d:n.d,key:kf.map(g).filter(Boolean).join(" / "),by:[...n.from].map(([s,c])=>`${s}: ${c} row${c===1?"":"s"}`).join("; ")}})
     .sort((a,b)=>SHEETS.indexOf(a.sh)-SHEETS.indexOf(b.sh)||a.d-b.d);
   for(const sh of SHEETS){const res=V[sh.id];if(!res.n)continue;let err=0;for(const [d,ri] of res.rows)if(ri.sev==="e"&&!isFlag(sh,S.data[sh.id][d]))err++;
@@ -1253,7 +1266,7 @@ function readinessPlan(checked,marked){const X=buildCtx(),need=new Map(),sheets=
   return {at:new Date(),marked,sheets,first,lists}}
 const planChecked=x=>x.checked==="yes"?"Yes":x.checked==="no"?"No Oracle check for this sheet yet":x.checked==="all marked"?"All rows already marked":x.checked||"";
 function planHtml(){const P=DF_PLAN;if(!P)return "";
-  let h=`<div class="sumsec">Oracle readiness: load plan<small>Checked against Oracle at ${pad(P.at.getHours())}:${pad(P.at.getMinutes())}${P.marked?`; ${nfmt(P.marked)} row${P.marked===1?"":"s"} newly marked Already in Oracle`:""}. Sheets in load order. Errors (missing codes, categories not assigned, and so on) are listed under Top issues. Run the check again after changes or loads.</small></div><table class="stab"><colgroup><col style="width:21%"><col style="width:23%"><col style="width:13%"><col style="width:10%"><col style="width:12%"><col></colgroup><tr><th>Sheet</th><th>Checked in Oracle</th><th class="n">Already in Oracle</th><th class="n">To load</th><th class="n">With errors</th><th class="n">Later rows wait for</th></tr>`;
+  let h=`<div class="sumsec">Oracle readiness: load plan<small>Checked against Oracle at ${pad(P.at.getHours())}:${pad(P.at.getMinutes())}${P.marked?`; ${nfmt(P.marked)} row${P.marked===1?"":"s"} newly marked Already in Oracle`:""}. Sheets in load order. Errors (missing codes, categories not assigned, and so on) are listed under Top issues. Run the check again after changes or loads.${P.waiting?" Some Oracle answers had not arrived when this was built: run the check again.":""}</small></div><table class="stab"><colgroup><col style="width:21%"><col style="width:23%"><col style="width:13%"><col style="width:10%"><col style="width:12%"><col></colgroup><tr><th>Sheet</th><th>Checked in Oracle</th><th class="n">Already in Oracle</th><th class="n">To load</th><th class="n">With errors</th><th class="n">Later rows wait for</th></tr>`;
   for(const x of P.sheets)h+=`<tr class="go" data-go="${x.sh.id}"><td class="nm" title="${esc(x.sh.name)}">${x.sh.no}. ${esc(x.sh.name)}</td><td class="tw">${esc(planChecked(x))}</td><td class="n">${x.inOra?nfmt(x.inOra):""}</td><td class="n">${x.toLoad?nfmt(x.toLoad):""}</td><td class="n" style="color:var(--err)">${x.err?nfmt(x.err):""}</td><td class="n">${x.first?nfmt(x.first):""}</td></tr>`;
   h+=`</table>`;
   if(P.first.length)h+=`<div class="sumsec">Load first<small>Rows that are not in Oracle yet and that other rows refer to. Load them, in this order, before the rows that need them. Select one to open it.</small></div><table class="stab"><colgroup><col style="width:21%"><col style="width:7%"><col style="width:30%"><col></colgroup><tr><th>Sheet</th><th class="n">Row</th><th>Record</th><th>Needed by</th></tr>${P.first.slice(0,200).map((f,i)=>`<tr class="go" data-first="${i}"><td class="nm">${f.sh.no}. ${esc(f.sh.name)}</td><td class="n">${f.d+1}</td><td class="tw">${esc(f.key)}</td><td class="tw">${esc(f.by)}</td></tr>`).join("")}</table>${P.first.length>200?`<p class="muted">${nfmt(P.first.length-200)} more in the exported issue log.</p>`:""}`;
@@ -1294,8 +1307,8 @@ async function dfSendSelected(mode){const upd=mode==="update";const sh=BYID[S.ac
 
 /* toolbar */
 $("bUndo").onclick=undo;
-if(DF_HOST){$("bLoadDF").onclick=dfLoadSelected;$("bUpdateDF").onclick=dfUpdateSelected;$("bCheckDF").onclick=dfCheckOracle}
-else ["bLoadDF","bUpdateDF","bCheckDF"].forEach(id=>$(id).remove());   // standalone edition: validation only
+if(DF_HOST){$("bLoadDF").onclick=dfLoadSelected;$("bUpdateDF").onclick=dfUpdateSelected;$("bCheckDF").onclick=dfCheckOracle;$("bCheckAllDF").onclick=dfReadiness}
+else ["bLoadDF","bUpdateDF","bCheckDF","bCheckAllDF"].forEach(id=>$(id).remove());   // standalone edition: validation only
 $("fView").onchange=e=>{S.view=e.target.value;focusRows=null;hideResult();sel={r:0,c:0,ar:0,ac:0};grid.scrollTop=0;refresh()};
 $("autoclean").onchange=e=>{S.cleanOnEntry=e.target.checked;scheduleSave()};
 $("bDel").onclick=()=>{const r0=Math.min(sel.r,sel.ar),r1=Math.max(sel.r,sel.ar);const del=new Set();for(let vr=r0;vr<=r1;vr++){const d=dr(vr);if(d!=null&&d<dataRowCount())del.add(d)}
@@ -1333,7 +1346,7 @@ function startFresh(){const rows=SHEETS.reduce((a,x)=>a+V[x.id].n,0),lv=LISTS.re
   <label class="opt"><input type="checkbox" id="sfRules"><span>Reset text rules to the defaults<small>Codes as typed, repeated-word check on, all-capitals check off</small></span></label>
   <div class="row"><button class="btn" id="sfExport">Export working workbook first</button><button class="btn" data-close>Cancel</button><button class="btn pri" id="sfGo">Clear</button></div>`);
   $("sfExport").onclick=()=>{closeModal();doExport("work",false)};
-  $("sfGo").onclick=()=>{const ids=[].concat($("sfData").checked?SHEETS.map(x=>x.id):[],$("sfLists").checked?LISTS.map(x=>x.id):[]);const rr=$("sfRules").checked;
+  $("sfGo").onclick=()=>{DF_PLAN=null;const ids=[].concat($("sfData").checked?SHEETS.map(x=>x.id):[],$("sfLists").checked?LISTS.map(x=>x.id):[]);const rr=$("sfRules").checked;
     if(!ids.length&&!rr){closeModal();return}
     if(ids.length)snapshot(ids,"Start fresh");ids.forEach(id=>S.data[id]=[]);if(rr)S.textRules={codeCase:"as_typed",flagRepeat:true,flagAllCaps:false};
     closeModal();focusRows=null;hideResult();changed();toast(`Cleared ${ids.length?nfmt(ids.length)+" sheets and lists":"text rules"}. Undo brings the rows back until you reload.`,ids.length?undo:null,"Undo")}}
@@ -1764,7 +1777,7 @@ function applyState(v){if(!v||!v.data)return false;
 // DataFlow edition: workbooks are files DataFlow owns. WB_NAME is the open workbook; dfWbWait resolves the startup request.
 // dfReady: a real workbook-data arrived, so saves may go to DataFlow (never after a timeout or workbook-error).
 let WB_NAME="",dfWbWait=null,dfReady=false,dfErr="";
-function dfWorkbook(m){WB_NAME=m.name||"";dfReady=true;dfErr="";if(dfWbWait){const f=dfWbWait;dfWbWait=null;f(m.state||null);return}
+function dfWorkbook(m){DF_PLAN=null;WB_NAME=m.name||"";dfReady=true;dfErr="";if(dfWbWait){const f=dfWbWait;dfWbWait=null;f(m.state||null);return}
   // DataFlow switched workbooks while the page is open: start from empty, then apply the file.
   for(const s of ALL)S.data[s.id]=[];S.textRules={codeCase:"as_typed",flagRepeat:true,flagAllCaps:false};
   applyState(m.state);$("autoclean").checked=S.cleanOnEntry;validateAll();openSheet(BYID[S.active]||S.active==="_lists"||S.active==="_summary"?S.active:SHEETS[0].id);
