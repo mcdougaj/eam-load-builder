@@ -1284,19 +1284,19 @@ function planHtml(){const P=DF_PLAN;if(!P)return "";
 const CHAIN_LINKS={
   an:(g,X)=>[["ca",["Organization","Asset Group","Category"],[g("Organization"),g("Asset Group"),g("Asset Category")]]],
   attv:(g,X)=>[["atta",["Organization","Asset Group","Attribute Group"],[g("Organization"),X.map("an",["Organization","Asset Number"],"Asset Group").get(g("Organization")+SEP+g("Asset Number"))||"",g("Attribute Group")]]]};
-function chainPlan(scope){const X=buildCtx(),memo=new Map(),need=new Map(),want=new Map(),left=[];
-  const deps=(sh,d)=>{const g=X.getter(sh,S.data[sh.id][d]),out=[];
+function chainDeps(X,sh,d){const g=X.getter(sh,S.data[sh.id][d]),out=[];
     for(const fl of sh.fields){const alts=[...(fl.ref&&(!fl.ref.when||fl.ref.when(g))?(fl.ref.any||[fl.ref]):[]),...(fl.also||[])];
       for(const alt of alts){if(alt.when&&!alt.when(g))continue;const vals=alt.m.map(p=>g(p[1]));if(vals.some(v=>!v))continue;const P=BYID[alt.s];
         for(const pd of X.rowsBy(alt.s,alt.m.map(p=>p[0])).get(vals.join(SEP))||[])if(!(alt.s===sh.id&&pd===d)&&!isFlag(P,S.data[alt.s][pd]))out.push([alt.s,pd])}}
     for(const [ps,kf,vals] of (CHAIN_LINKS[sh.id]?CHAIN_LINKS[sh.id](g,X):[])){if(vals.some(v=>!v))continue;
       for(const pd of X.rowsBy(ps,kf).get(vals.join(SEP))||[])if(!isFlag(BYID[ps],S.data[ps][pd]))out.push([ps,pd])}
-    return out};
+    return out}
+function chainPlan(scope){const X=buildCtx(),memo=new Map(),need=new Map(),want=new Map(),left=[];
   const visit=(sid,d,trail)=>{const key=sid+SEP+d;if(memo.has(key))return memo.get(key);if(trail.has(key))return true;   // a loop of parents is an error on the rows themselves
     const sh=BYID[sid],row=S.data[sid][d],ri=V[sid].rows.get(d);
     if(!row||isBlank(row)||isFlag(sh,row)){memo.set(key,true);return true}                     // nothing to load here, nothing in the way
     if(ri&&ri.sev==="e"){memo.set(key,false);left.push({sh,d,why:"has errors"});return false}
-    const dl=deps(sh,d);need.set(key,dl);trail.add(key);let bad=null;for(const [ps,pd] of dl)if(!visit(ps,pd,trail)){bad=BYID[ps].name+" row "+(pd+1);break}trail.delete(key);
+    const dl=chainDeps(X,sh,d);need.set(key,dl);trail.add(key);let bad=null;for(const [ps,pd] of dl)if(!visit(ps,pd,trail)){bad=BYID[ps].name+" row "+(pd+1);break}trail.delete(key);
     if(bad){memo.set(key,false);left.push({sh,d,why:"needs "+bad+", which is left out"});return false}
     memo.set(key,true);return true};
   // Only rows a loadable row leads to are sent: what a left-out row needs is not loaded on its own.
@@ -1305,6 +1305,16 @@ function chainPlan(scope){const X=buildCtx(),memo=new Map(),need=new Map(),want=
   else for(const d of scope.rows)if(visit(scope.sid,d,new Set()))take(scope.sid,d);
   const steps=SHEETS.filter(sh=>want.has(sh.id)).map(sh=>dfRows(sh,[...want.get(sh.id)].sort((a,b)=>a-b)));
   return {steps,left}}
+function chainNeeds(sh,pick){const X=buildCtx(),seen=new Set(pick.map(d=>sh.id+SEP+d)),out=[],todo=pick.map(d=>[sh.id,d]);
+  while(todo.length){const [sid,d]=todo.pop();for(const [ps,pd] of chainDeps(X,BYID[sid],d)){const key=ps+SEP+pd;if(seen.has(key))continue;seen.add(key);
+    const P=BYID[ps],g=X.getter(P,S.data[ps][pd]),kf=dfRowKeys(P)[0]||[P.fields[0].n];out.push({sh:P,d:pd,key:kf.map(g).filter(Boolean).join(" / ")});todo.push([ps,pd])}}
+  return out.sort((x,y)=>SHEETS.indexOf(x.sh)-SHEETS.indexOf(y.sh)||x.d-y.d)}
+// Load selected, when the rows need rows that are not in Oracle yet: "chain" (load those first), "only" or null (cancel).
+function dfConfirmNeeds(needs){return new Promise(res=>{let done=false;const fin=v=>{if(!done){done=true;res(v)}};
+  modal(`<h2>${nfmt(needs.length)} row${needs.length===1?" has":"s have"} to be loaded first</h2><p>The selected rows use these rows, which are on their sheets but not marked Already in Oracle. Oracle rejects the selected rows until they are loaded.</p>
+  <table><tr><th>Sheet</th><th class="n">Row</th><th>Record</th></tr>${needs.slice(0,10).map(x=>`<tr><td>${esc(x.sh.name)}</td><td class="n">${x.d+1}</td><td>${esc(x.key)}</td></tr>`).join("")}</table>${needs.length>10?`<p class="muted">and ${nfmt(needs.length-10)} more</p>`:""}
+  <div class="row"><button class="btn" data-close>Cancel</button><button class="btn" id="dfOnly">Load only the selected rows</button><button class="btn pri" id="dfWith">Load with what they need</button></div>`);
+  $("dfWith").onclick=()=>{closeModal();fin("chain")};$("dfOnly").onclick=()=>{closeModal();fin("only")};$("modal").querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click",()=>fin(null)))})}
 async function dfLoadChain(all){
   if(!DF_HOST)return;if(editing)commitEdit();
   let scope="all";
@@ -1341,16 +1351,19 @@ async function dfSendSelected(mode){const upd=mode==="update";const sh=BYID[S.ac
   // Update: a blank cell never changes the form, so errors on blank non-key cells (e.g. "is required") don't block;
   // a blank key does (the record can't be found). Value errors (bad date/number, too long, duplicate) still block.
   const keys=upd?dfKeyCols(sh):[],blankCell=(d,c)=>String(S.data[sh.id][d][c]??"").trim()==="";
-  const hard=[],soft=[],noKey=[];
+  const hard=[],soft=[],noKey=[],why=[];
   for(const d of pick){if(upd&&keys.some(c=>blankCell(d,c))){noKey.push(d);continue}
     const ri=V[sh.id].rows.get(d);if(!ri||ri.sev!=="e")continue;
     const cells=[...ri.cells].filter(([c,ce])=>ce.sev==="e"&&!(upd&&!keys.includes(c)&&blankCell(d,c)));
     if(!ri.msgs.some(m=>m[0]==="e")&&!cells.length)continue;
-    const refOnly=!ri.msgs.some(m=>m[0]==="e")&&cells.every(([c])=>!!(sh.fields[c].ref||sh.fields[c].lk));
+    // A linked value Oracle was asked about and does not have ("... or in Oracle") is a real error: Oracle rejects the row.
+    const refOnly=!ri.msgs.some(m=>m[0]==="e")&&cells.every(([c,ce])=>!!(sh.fields[c].ref||sh.fields[c].lk)&&!ce.msgs.some(m=>m[0]==="e"&&/ or in Oracle/.test(m[1])));
+    if(!refOnly)why.push([d,(ri.msgs.find(m=>m[0]==="e")||[])[1]||cells.map(([c,ce])=>(ce.msgs.find(m=>m[0]==="e")||[])[1]).filter(Boolean)[0]||""]);
     (refOnly?soft:hard).push(d)}
   if(noKey.length){toast(`${noKey.length} selected row${noKey.length>1?"s have":" has"} a blank ${keys.map(c=>sh.fields[c].n).join(" / ")} — DataFlow needs it to find the record. Fill ${noKey.length>1?"them":"it"} first.`);return}
-  if(hard.length){toast(`${hard.length} selected row${hard.length>1?"s have":" has"} errors Oracle would also reject (${upd?"blank key, ":"blank required value, "}bad date, too long or duplicate). Fix ${hard.length>1?"them":"it"} first.`);return}
+  if(hard.length){modal(`<h2>${nfmt(hard.length)} selected row${hard.length>1?"s have":" has"} errors Oracle would reject</h2><p>Fix ${hard.length>1?"them":"it"} first, then load. Nothing was sent.</p><table><tr><th class="n">Row</th><th>Error</th></tr>${why.slice(0,10).map(([d,m])=>`<tr><td class="n">${d+1}</td><td>${esc(m)}</td></tr>`).join("")}</table>${why.length>10?`<p class="muted">and ${nfmt(why.length-10)} more: the Summary lists them under Top issues.</p>`:""}<div class="row"><button class="btn pri" data-close>Close</button></div>`);return}
   if(soft.length&&!(await dfConfirmRefs(soft.length,pick.length)))return;
+  if(!upd){const needs=chainNeeds(sh,pick);if(needs.length){const how=await dfConfirmNeeds(needs);if(how==="chain"){dfLoadChain(false);return}if(!how)return}}
   dfPost(Object.assign({type:"load-rows",mode},dfRows(sh,pick)));
   toast(upd?`Sent ${pick.length} row${pick.length>1?"s":""} to the Load workspace to update. Run the test there; rows not in Oracle are held back.`
            :`Sent ${pick.length} row${pick.length>1?"s":""} to the Load workspace. Run the test there; this sheet updates when rows are in Oracle.`)}
