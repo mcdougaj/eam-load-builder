@@ -335,6 +335,11 @@ const SHEETS=[
   if(agRows){const t=typeOf(X.map("ag",["Organization","Asset Group"],"Asset Type").get(k(o,a)));if(t!==typeOf(g("Asset Type")))P("Asset Type","e",`"${a}" is ${t} on Asset Group, but this asset is ${typeOf(g("Asset Type"))}`,"Asset type doesn't match its asset group",null,{s:"ag",rows:agRows})}
   if(a&&c&&X.set("ca",["Organization","Asset Group"]).has(k(o,a))&&!X.set("ca",["Organization","Asset Group","Category"]).has(k(o,a,c)))P("Asset Category","w",`Category "${c}" isn't assigned to asset group "${a}" on Category Assignment`,"Asset category not assigned to its asset group",{s:"ca",v:{Organization:o,"Asset Group":a,Category:c}});
   if(g("Parent Asset Number")&&g("Parent Asset Number")===g("Asset Number"))P("Parent Asset Number","e","An asset can't be its own parent","Asset is its own parent");
+  else if(g("Parent Asset Number")&&g("Asset Number")){
+    // Walk up the parents (same org): coming back to this asset means the chain is a circle, and no asset in it can load first.
+    const up=X.map("an",["Organization","Asset Number"],"Parent Asset Number"),me=g("Asset Number"),chain=[me];
+    for(let p=g("Parent Asset Number"),n=0;p&&n<50;n++){chain.push(p);if(p===me){P("Parent Asset Number","e","Circular parent chain: "+chain.join(" > "),"Circular parent chain");break}
+      const nx=up.get(k(o,p));if(!nx||chain.indexOf(nx)>0&&nx!==me)break;p=nx}}
   const an=g("Asset Number"),sn=g("Serial Number");
   const rr=an&&X.rowsBy("rt",["Asset Route Number"]).get(an);if(rr)P("Asset Number","e",`"${an}" is also an Asset Route Number. Routes are asset numbers, so the two can't share a number`,"Asset number also used as a route",null,{s:"rt",rows:rr});
   if(an){const orgs=X.multi("an",["Asset Number"],"Organization").get(an);if(orgs&&orgs.size>1)P("Asset Number","w",`Also used in org ${[...orgs].filter(x=>x!==o).slice(0,3).join(", ")}. Confirm your instance allows the same asset number in two orgs`,"Asset number used in more than one org",null,{s:"an",rows:X.rowsBy("an",["Asset Number"]).get(an).filter(i=>(S.data.an[i][BYID.an.ix.Organization]||"")!==o)})}
