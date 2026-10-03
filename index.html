@@ -325,7 +325,7 @@ const SHEETS=[
  rule(g,P,X){if(g("Serial Generation")==="Predefined")for(const n of ["Starting Prefix","Starting Number"])if(!g(n))P(n,"e",n+" is required when Serial Generation is Predefined",n+" required for Predefined");
   const o=g("Organization"),a=g("Asset Group");
   // No category on Category Assignment - and, in DataFlow, none in Oracle either (nothing is said while Oracle is asked).
-  if(o&&a&&!X.set("ca",["Organization","Asset Group"]).has(k(o,a))&&(!DF_HOST||dfState("ca",["Organization","Asset Group"],[o,a])==="n"))
+  if(o&&a&&!X.set("ca",["Organization","Asset Group"]).has(k(o,a))&&(!DF_HOST||["n","x"].includes(dfState("ca",["Organization","Asset Group"],[o,a]))))
     P("Asset Group","w",DF_HOST?"No category is assigned to this asset group (Category Assignment or Oracle). Assets that carry a category will be rejected":"No category assigned to this asset group yet","Asset group has no category assignment")}},
 {id:"ca",g:"Foundation",name:"Category Assignment",nav:"Setup > Category > Category Sets (Enterprise Asset Management) > Assign",
  fields:[O(),f("Asset Group","t",40,1,{ref:rAG}),f("Category","t",81,1,{ref:rCat("Category"),also:[{s:"cs",m:[["Category","Category"]],label:"Category Set (the set's list of valid categories)"}]})],
@@ -1119,15 +1119,16 @@ let dfReqId=0;
 function dfSendLookup(sid,fields,rows,done){const name=BYID[sid].name;let s=dfSent.get(name);if(!s){s=[];dfSent.set(name,s)}
   const req={id:"q"+(++dfReqId),sid,kks:rows.map(v=>v.join(SEP)),done};
   req.msg={type:"lookup-oracle",id:req.id,sheet:name,headers:fields,rows,sourceRows:rows.map((_,j)=>j)};
-  req.timer=setTimeout(()=>dfSettle(name,req,{error:"DataFlow didn't answer"}),330000);
-  s.push(req);if(s.length===1)dfPost(req.msg)}
+  s.push(req);if(s.length===1)dfGo(name,req)}
+// The give-up clock starts when the request goes out, not while it waits its turn.
+function dfGo(name,req){req.timer=setTimeout(()=>dfSettle(name,req,{error:"DataFlow didn't answer"}),330000);dfPost(req.msg)}
 function dfFlushLookup(){const q=dfLookupQ;dfLookupQ=new Map();
   for(const {sid,fields,rows} of q.values()){const all=[...rows.values()];
     for(let i=0;i<all.length;i+=5000)dfSendLookup(sid,fields,all.slice(i,i+5000))}}
 // Settles one request: found keys "y", the rest "n", or all "x" when Oracle couldn't be asked; then the sheet's next request goes.
-function dfSettle(name,req,m){const s=dfSent.get(name)||[],at=s.indexOf(req);if(at<0)return;clearTimeout(req.timer);s.splice(at,1);if(at===0&&s.length)dfPost(s[0].msg);
+function dfSettle(name,req,m){const s=dfSent.get(name)||[],at=s.indexOf(req);if(at<0)return;clearTimeout(req.timer);s.splice(at,1);if(at===0&&s.length)dfGo(name,s[0]);
   let a=DF_ASKED.get(req.sid);if(!a){a=new Map();DF_ASKED.set(req.sid,a)}
-  if(m.error){for(const k of req.kks)if(a.get(k)!=="y")a.set(k,"x");
+  if(m.error){if(!req.done)for(const k of req.kks)if(a.get(k)!=="y")a.set(k,"x");   // the workbook check reports its own errors per sheet
     if(!req.done&&!dfLookupErr&&!/No DataFlow recipe|No Oracle check/.test(m.error)){dfLookupErr=true;toast("Couldn't check references in Oracle: "+m.error)}}
   else{let kn=DF_KNOWN.get(req.sid);if(!kn){kn=new Set();DF_KNOWN.set(req.sid,kn)}
     for(const row of m.found||[]){const kk=row.join(SEP);kn.add(kk);a.set(kk,"y")}
@@ -1217,7 +1218,7 @@ async function dfReadiness(){
   if(!DF_HOST){toast("The Oracle check runs in DataFlow's Build page.");return}
   if(dfChecking){toast("The Oracle check is still running.");return}
   if(editing)commitEdit();
-  dfChecking=true;toast("Checking the workbook against Oracle…");
+  dfChecking=true;toast("Checking the workbook against Oracle…");const wb0=WB_NAME;
   try{
     DF_KNOWN.clear();DF_ASKED.clear();dfLookupErr=false;        // a fresh look: records loaded since the last check are seen
     const checked=new Map(),marks=[];
@@ -1243,10 +1244,11 @@ async function dfReadiness(){
     for(let i=0;i<1700&&dfWaiting();i++)await new Promise(r=>setTimeout(r,200));
     validateAll();
     // 3. The plan.
-    DF_PLAN=readinessPlan(checked,cells.size);DF_PLAN.waiting=dfWaiting();
+    if(WB_NAME!==wb0){toast("The workbook changed while Oracle was being checked - run the check again.");return}
+    DF_PLAN=readinessPlan(checked,cells.size);DF_PLAN.waiting=dfWaiting()||[...DF_ASKED.values()].some(a=>[...a.values()].includes("x"));
     openSheet("_summary");
     const te=DF_PLAN.sheets.reduce((a,x)=>a+x.err,0);
-    toast(`Oracle check ${DF_PLAN.waiting?"not complete (some answers are still on their way - run it again)":"done"}: ${nfmt(cells.size)} row${cells.size===1?"":"s"} newly marked Already in Oracle, ${nfmt(te)} row${te===1?"":"s"} with errors, ${nfmt(DF_PLAN.first.length)} to load first.`)}
+    toast(`Oracle check ${DF_PLAN.waiting?"not complete (some values could not be checked in Oracle - run it again)":"done"}: ${nfmt(cells.size)} row${cells.size===1?"":"s"} newly marked Already in Oracle, ${nfmt(te)} row${te===1?"":"s"} with errors, ${nfmt(DF_PLAN.first.length)} to load first.`)}
   catch(e){console.error(e);toast("The Oracle check stopped: "+(e&&e.message||e))}
   finally{dfChecking=false}}
 // Per sheet (load order): rows in Oracle, to load, with errors, and the rows later sheets wait for ("load first"):
@@ -1266,7 +1268,7 @@ function readinessPlan(checked,marked){const X=buildCtx(),need=new Map(),sheets=
   return {at:new Date(),marked,sheets,first,lists}}
 const planChecked=x=>x.checked==="yes"?"Yes":x.checked==="no"?"No Oracle check for this sheet yet":x.checked==="all marked"?"All rows already marked":x.checked||"";
 function planHtml(){const P=DF_PLAN;if(!P)return "";
-  let h=`<div class="sumsec">Oracle readiness: load plan<small>Checked against Oracle at ${pad(P.at.getHours())}:${pad(P.at.getMinutes())}${P.marked?`; ${nfmt(P.marked)} row${P.marked===1?"":"s"} newly marked Already in Oracle`:""}. Sheets in load order. Errors (missing codes, categories not assigned, and so on) are listed under Top issues. Run the check again after changes or loads.${P.waiting?" Some Oracle answers had not arrived when this was built: run the check again.":""}</small></div><table class="stab"><colgroup><col style="width:21%"><col style="width:23%"><col style="width:13%"><col style="width:10%"><col style="width:12%"><col></colgroup><tr><th>Sheet</th><th>Checked in Oracle</th><th class="n">Already in Oracle</th><th class="n">To load</th><th class="n">With errors</th><th class="n">Later rows wait for</th></tr>`;
+  let h=`<div class="sumsec">Oracle readiness: load plan<small>Checked against Oracle at ${pad(P.at.getHours())}:${pad(P.at.getMinutes())}${P.marked?`; ${nfmt(P.marked)} row${P.marked===1?"":"s"} newly marked Already in Oracle`:""}. Sheets in load order. Errors (missing codes, categories not assigned, and so on) are listed under Top issues. Run the check again after changes or loads.${P.waiting?" Some values could not be checked in Oracle (no answer, or no check for that sheet): run the check again.":""}</small></div><table class="stab"><colgroup><col style="width:21%"><col style="width:23%"><col style="width:13%"><col style="width:10%"><col style="width:12%"><col></colgroup><tr><th>Sheet</th><th>Checked in Oracle</th><th class="n">Already in Oracle</th><th class="n">To load</th><th class="n">With errors</th><th class="n">Later rows wait for</th></tr>`;
   for(const x of P.sheets)h+=`<tr class="go" data-go="${x.sh.id}"><td class="nm" title="${esc(x.sh.name)}">${x.sh.no}. ${esc(x.sh.name)}</td><td class="tw">${esc(planChecked(x))}</td><td class="n">${x.inOra?nfmt(x.inOra):""}</td><td class="n">${x.toLoad?nfmt(x.toLoad):""}</td><td class="n" style="color:var(--err)">${x.err?nfmt(x.err):""}</td><td class="n">${x.first?nfmt(x.first):""}</td></tr>`;
   h+=`</table>`;
   if(P.first.length)h+=`<div class="sumsec">Load first<small>Rows that are not in Oracle yet and that other rows refer to. Load them, in this order, before the rows that need them. Select one to open it.</small></div><table class="stab"><colgroup><col style="width:21%"><col style="width:7%"><col style="width:30%"><col></colgroup><tr><th>Sheet</th><th class="n">Row</th><th>Record</th><th>Needed by</th></tr>${P.first.slice(0,200).map((f,i)=>`<tr class="go" data-first="${i}"><td class="nm">${f.sh.no}. ${esc(f.sh.name)}</td><td class="n">${f.d+1}</td><td class="tw">${esc(f.key)}</td><td class="tw">${esc(f.by)}</td></tr>`).join("")}</table>${P.first.length>200?`<p class="muted">${nfmt(P.first.length-200)} more in the exported issue log.</p>`:""}`;
