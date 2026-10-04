@@ -434,7 +434,7 @@ const SHEETS=[
  fields:[O(),f("Resource","t",10,1,{ref:{s:"res",m:[["Organization","Organization"],["Resource","Resource"]]}}),f("Cost Type","t",10,1),f("Resource Unit Cost","n",0,1,{min:0})],
  keys:[["Organization","Resource","Cost Type"]]},
 {id:"dres",g:"Activities",name:"Department Resources",nav:"Bills of Material > Routings > Departments > Resources button. A resource must be assigned to a department before an operation in that department can use it.",
- fields:[O(),f("Department","t",10,1,{lk:"depts"}),f("Resource","t",10,1,{ref:{s:"res",m:[["Organization","Organization"],["Resource","Resource"]]}}),f("Available 24 Hours","yn"),f("Share","yn"),f("Units","n",0,1,{gt0:"e"})],
+ fields:[O(),f("Department","t",10,1,{lk:"depts"}),f("Resource","t",10,1,{ref:{s:"res",orList:"resources",label:"Resources or the Resources in Oracle list",m:[["Organization","Organization"],["Resource","Resource"]]}}),f("Available 24 Hours","yn"),f("Share","yn"),f("Units","n",0,1,{gt0:"e"})],
  keys:[["Organization","Department","Resource"]]},
 {id:"act",g:"Activities",name:"Activity",nav:"Activity header. Template must be a defined item template.",
  fields:[O(),f("Activity Name","t",40,1),f("Description","t",240,1),f("Template Name","t",30,1,{lk:"templates",def:"@Activity"}),f("Activity Type","t",80,0,{lk:"act_type"}),f("Shutdown","t",80,0,{lk:"shutdown"}),f("Activity Cause","t",80,0,{lk:"act_cause"}),f("Activity Source","t",80,0,{lk:"act_source"}),f("Notification","yn")],
@@ -445,7 +445,7 @@ const SHEETS=[
  keys:[["Organization","Activity Name","Operation Sequence Number"]],
  rule(g,P,X){const o=g("Organization"),a=g("Activity Name"),s=g("Operation Sequence Number");if(o&&a&&s&&!X.set("ares",["Organization","Activity Name","Operation Sequence Number"]).has(k(o,a,s)))P("Operation Sequence Number","w","No resource on Activity Resource for this operation","Operation has no resource")}},
 {id:"ares",g:"Activities",name:"Activity Resource",
- fields:[O(),f("Activity Name","t",40,1,{ref:rAct("Activity Name")}),f("Operation Sequence Number","n",0,1,{ref:rOp("Activity Name","Operation Sequence Number")}),f("Resource Sequence Number","n",0,1,{min:1}),f("Resource Code","t",10,1,{ref:{s:"res",m:[["Organization","Organization"],["Resource","Resource Code"]]}}),f("Basis","e",5,1,{en:["Item","Lot"],def:"Item"}),f("Assigned Units","n",0,1,{gt0:"e"}),f("Usage","n",0,1,{gt0:"w"})],
+ fields:[O(),f("Activity Name","t",40,1,{ref:rAct("Activity Name")}),f("Operation Sequence Number","n",0,1,{ref:rOp("Activity Name","Operation Sequence Number")}),f("Resource Sequence Number","n",0,1,{min:1}),f("Resource Code","t",10,1,{ref:{s:"res",orList:"resources",label:"Resources or the Resources in Oracle list",m:[["Organization","Organization"],["Resource","Resource Code"]]}}),f("Basis","e",5,1,{en:["Item","Lot"],def:"Item"}),f("Assigned Units","n",0,1,{gt0:"e"}),f("Usage","n",0,1,{gt0:"w"})],
  keys:[["Organization","Activity Name","Operation Sequence Number","Resource Sequence Number"]]},
 {id:"actbom",g:"Activities",name:"Activity BOM",
  fields:[O(),f("Activity","t",40,1,{ref:rAct("Activity")}),f("Operation Seq","n",0,1,{ref:rOp("Activity","Operation Seq")}),f("Component","t",40,1,{lk:"items"}),f("Quantity","n",0,1,{min:0}),f("From","d"),f("To","d",0,0,{after:"From"})],
@@ -492,12 +492,12 @@ const SHEETS=[
   if(dt==="Short Text"&&g("Text").length>4000)P("Text","e","Short Text is limited to 4,000 characters","Short text over 4,000 characters");
   if(dt==="Web Page"&&!g("URL"))P("URL","e","Web Page needs a URL","Web page attachment without URL")}}
 ];
-const LOOKUPS=[["orgs","Organizations","Inventory organization codes. Every Organization field checks here."],["depts","Departments","Owning, operation and PM departments"],["resources","Resources","Resource codes on Activity Resource"],["wip","WIP accounting classes",""],["crit","Criticality codes",""],["templates","Item templates","Asset Group and Activity templates"],["items","Inventory items","BOM components"],["planners","Planners",""],["act_type","Activity types",""],["act_cause","Activity causes",""],["act_source","Activity sources",""],["shutdown","Shutdown types",""],["priority","Priorities",""],["uom","Units of measure","Meters"],["wo_status","Work order statuses","PM Schedule"],["wo_type","Work order types","Activity Association work order default, for example Routine or Rebuild"],["abbr","Abbreviations","Standard abbreviations such as INSP or PM. When rows are cleaned, matching words in text fields are set to exactly this case."]];
+const LOOKUPS=[["orgs","Organizations","Inventory organization codes. Every Organization field checks here."],["depts","Departments","Owning, operation and PM departments"],["resources","Resources in Oracle","Resource codes that already exist in Oracle, for Activity Resource and Department Resources. New resources go on the Resources sheet"],["wip","WIP accounting classes",""],["crit","Criticality codes",""],["templates","Item templates","Asset Group and Activity templates"],["items","Inventory items","BOM components"],["planners","Planners",""],["act_type","Activity types",""],["act_cause","Activity causes",""],["act_source","Activity sources",""],["shutdown","Shutdown types",""],["priority","Priorities",""],["uom","Units of measure","Meters"],["wo_status","Work order statuses","PM Schedule"],["wo_type","Work order types","Activity Association work order default, for example Routine or Rebuild"],["abbr","Abbreviations","Standard abbreviations such as INSP or PM. When rows are cleaned, matching words in text fields are set to exactly this case."]];
 const LKLABEL=Object.fromEntries(LOOKUPS.map(x=>[x[0],x[1]]));
 const FLAG="Already in Oracle";
 SHEETS.forEach(sh=>sh.fields.push(f(FLAG,"yn",0,0,{tool:true})));
 const LK_USES={};LOOKUPS.forEach(l=>LK_USES[l[0]]=[]);
-SHEETS.forEach(sh=>sh.fields.forEach(fl=>{if(fl.lk)LK_USES[fl.lk].push({sid:sh.id,field:fl.n,len:fl.l})}));
+SHEETS.forEach(sh=>sh.fields.forEach(fl=>{const lk=fl.lk||(fl.ref&&fl.ref.orList);if(lk)LK_USES[lk].push({sid:sh.id,field:fl.n,len:fl.l})}));
 const LISTS=LOOKUPS.map(([key,label,desc])=>{const len=Math.max(3,...LK_USES[key].map(u=>u.len||0));
   const fields=key==="orgs"?[f("Code","t",3,1),f("Description","t",240),f("Active","yn")]:key==="abbr"?[f("Code","t",20,1),f("Description","t",240),f("Active","yn")]:[f("Organization","t",3,0,{lk:"orgs"}),f("Code","t",len,1),f("Description","t",240),f("Active","yn")];
   return {id:"L_"+key,list:key,g:"Reference lists",name:label,nav:(desc?desc.replace(/\.?$/,". "):"")+(key==="orgs"||key==="abbr"?"":"Leave Organization blank for values valid in every org."),fields,keys:[key==="orgs"||key==="abbr"?["Code"]:["Organization","Code"]]}});
@@ -676,6 +676,8 @@ function checkRef(fl,g,X,add){
   const ref=fl.ref;if(ref.when&&!ref.when(g))return;const alts=ref.any||[ref];
   const srcVals=alts[0].m.map(p=>g(p[1]));if(srcVals.some(x=>!x))return;
   for(const alt of alts){const kk=alt.m.map(p=>g(p[1])).join(SEP);if(X.set(alt.s,alt.m.map(p=>p[0])).has(kk))return}
+  // orList: the value is also fine when it is on a reference list (codes that already exist in Oracle).
+  if(ref.orList&&LSET[ref.orList]&&!lkCheck(ref.orList,srcVals[srcVals.length-1],g("Organization")))return;
   // DataFlow edition: a reference that exists in Oracle (e.g. a parent asset loaded earlier) is valid too.
   let pending=false;
   if(DF_HOST)for(const alt of alts){const kk=alt.m.map(p=>g(p[1])).join(SEP);const kn=DF_KNOWN.get(alt.s);if(kn&&kn.has(kk))return;
