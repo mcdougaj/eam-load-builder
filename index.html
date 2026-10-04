@@ -1218,7 +1218,14 @@ function dfOnMessage(m){if(!m||typeof m!=="object")return;
     toast(dfErr);$("saved").textContent=dfErr;if(dfWbWait){const f=dfWbWait;dfWbWait=null;f(null)}}
   else if(m.type==="error")toast("DataFlow: "+m.message)}
 if(DF_HOST)window.chrome.webview.addEventListener("message",e=>dfOnMessage(e.data));
-async function dfCheckOracle(){const sh=BYID[S.active];if(!sh||sh.list){toast("Open a sheet first.");return}
+// A reference list holds values Oracle already has: nothing on it is loaded. Lists that have a data sheet point to it.
+const LIST_SHEET={L_resources:"res"};
+function dfNotASheet(sh){if(!sh||!sh.list){toast("Open a sheet first.");return}
+  const to=BYID[LIST_SHEET[sh.id]];
+  modal(`<h2>${esc(sh.name)} is a reference list</h2><p>It holds the values Oracle already has, used to check your sheets. Nothing on a list is loaded into Oracle.</p>${to?`<p>To add new records, enter them on the <b>${esc(to.name)}</b> sheet (${to.no}) and load from there.</p>`:"<p>Open the data sheet you want to load, select its rows, then load.</p>"}
+  <div class="row"><button class="btn" data-close>Close</button>${to?`<button class="btn pri" id="goSheet">Open ${esc(to.name)}</button>`:""}</div>`);
+  if(to)$("goSheet").onclick=()=>{closeModal();openSheet(to.id)}}
+async function dfCheckOracle(){const sh=BYID[S.active];if(!sh||sh.list){dfNotASheet(sh);return}
   if(sh.ix[FLAG]==null){toast(`This sheet has no "${FLAG}" column to mark.`);return}
   const pick=[];for(let d=0;d<S.data[sh.id].length;d++){const row=S.data[sh.id][d];if(!isBlank(row)&&!isFlag(sh,row))pick.push(d)}
   if(!pick.length){toast("Every row on this sheet is already marked Already in Oracle.");return}
@@ -1339,7 +1346,7 @@ function dfConfirmNeeds(needs){return new Promise(res=>{let done=false;const fin
 async function dfLoadChain(all){
   if(!DF_HOST)return;if(editing)commitEdit();
   let scope="all";
-  if(!all){const sh=BYID[S.active];if(!sh||sh.list){toast("Open a sheet first.");return}
+  if(!all){const sh=BYID[S.active];if(!sh||sh.list){dfNotASheet(sh);return}
     const r0=Math.min(sel.r,sel.ar),r1=Math.max(sel.r,sel.ar),rows=[];
     for(let vr=r0;vr<=r1;vr++){const d=dr(vr);if(d==null||d>=dataRowCount())continue;const row=S.data[sh.id][d];if(!isBlank(row)&&!isFlag(sh,row))rows.push(d)}
     if(!rows.length){toast("Select the rows to load first. Rows marked Already in Oracle are skipped.");return}
@@ -1362,7 +1369,7 @@ function dfKeyCols(sh){const k0=(sh.keys||[])[0],names=(Array.isArray(k0)?k0:(k0
 // Load selected: create new records (rows marked Already in Oracle are skipped). Update selected: change existing
 // records with an update recipe, so rows marked Already in Oracle are sent too (DataFlow holds back rows not in Oracle).
 const dfLoadSelected=()=>dfSendSelected("create"),dfUpdateSelected=()=>dfSendSelected("update");
-async function dfSendSelected(mode){const upd=mode==="update";const sh=BYID[S.active];if(!sh||sh.list){toast("Open a sheet first.");return}
+async function dfSendSelected(mode){const upd=mode==="update";const sh=BYID[S.active];if(!sh||sh.list){dfNotASheet(sh);return}
   const r0=Math.min(sel.r,sel.ar),r1=Math.max(sel.r,sel.ar),pick=[];
   for(let vr=r0;vr<=r1;vr++){const d=dr(vr);if(d==null||d>=dataRowCount())continue;const row=S.data[sh.id][d];if(isBlank(row)||(!upd&&isFlag(sh,row)))continue;pick.push(d)}
   if(!pick.length){toast(upd?"Select the rows to update first.":"Select the rows to load first. Rows marked Already in Oracle are skipped.");return}
