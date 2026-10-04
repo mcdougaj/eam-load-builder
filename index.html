@@ -424,9 +424,12 @@ const SHEETS=[
  fields:[O(),f("Route Asset Number","t",30,1,{ref:{s:"rt",m:[["Organization","Organization"],["Asset Route Number","Route Asset Number"]]}}),f("Asset Number","t",30,1,{ref:rAssetOnly("Asset Number")}),f("Effective From Date","d"),f("Effective To Date","d",0,0,{after:"Effective From Date"})],
  keys:[["Organization","Route Asset Number","Asset Number"]]},
 {id:"res",g:"Activities",name:"Resources",nav:"Bills of Material > Routings > Resources. One row per resource code. Oracle has no public API for resources: they load through the form on the Load page.",
- fields:[O(),f("Resource","t",10,1),f("Description","t",240),f("Type","e",13,1,{en:["Machine","Person","Space","Miscellaneous","Amount"],def:"Person"}),f("UOM","t",3,1,{lk:"uom",def:"HR"}),f("Charge Type","e",10,1,{en:["Manual","WIP Move","PO Receipt","PO Move"],def:"Manual"}),f("Basis","e",5,0,{en:["Item","Lot"],def:"Item"}),f("Expenditure Type","t",30),f("Costed","yn"),f("Standard Rate","yn"),f("Absorption Account","t",60),f("Variance Account","t",60),f("Inactive On","d")],
+ fields:[O(),f("Resource","t",10,1),f("Description","t",240),f("Type","e",13,1,{en:["Amount","Currency","Machine","Miscellaneous","Person"],def:"Person"}),f("UOM","t",3,1,{lk:"uom",def:"HR"}),f("Charge Type","e",10,1,{en:["Manual","PO Receipt","PO Move","WIP Move"],def:"Manual"}),f("Basis","e",5,0,{en:["Item","Lot"],def:"Item"}),f("Expenditure Type","t",30),f("Costed","yn"),f("Standard Rate","yn"),f("Absorption Account","t",60),f("Variance Account","t",60),f("Inactive On","d")],
  keys:[["Organization","Resource"]],
- rule(g,P){if(g("Costed")==="Y"&&!g("Absorption Account"))P("Absorption Account","e","Absorption Account is required when Costed is Y","Absorption account required for a costed resource")}},
+ rule(g,P){const costed=g("Costed")==="Y";if(costed&&!g("Absorption Account"))P("Absorption Account","e","Absorption Account is required when Costed is Y","Absorption account required for a costed resource");
+  if(costed&&g("Standard Rate")==="Y"&&!g("Variance Account"))P("Variance Account","e","Variance Account is required when Standard Rate is Y","Variance account required for a standard-rate resource");
+  // The form only opens these fields when Costed is ticked: a value here on an uncosted row would be typed into the wrong field.
+  if(!costed)for(const n of ["Standard Rate","Absorption Account","Variance Account"])if(g(n)&&g(n)!=="N")P(n,"e",n+" is only used when Costed is Y","Costing detail on a resource that is not costed")}},
 {id:"resr",g:"Activities",name:"Resource Rates",nav:"Resources form > Rates button. The cost of one unit of the resource for a cost type.",
  fields:[O(),f("Resource","t",10,1,{ref:{s:"res",m:[["Organization","Organization"],["Resource","Resource"]]}}),f("Cost Type","t",10,1),f("Resource Unit Cost","n",0,1,{min:0})],
  keys:[["Organization","Resource","Cost Type"]]},
