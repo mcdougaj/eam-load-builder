@@ -517,6 +517,23 @@ const LGROUPS=[["Activity and work order codes",["act_type","act_cause","act_sou
 LISTS.sort((a,b)=>{const gi=x=>LGROUPS.findIndex(g=>g[1].includes(x.list));const pi=x=>LGROUPS[gi(x)][1].indexOf(x.list);return gi(a)-gi(b)||pi(a)-pi(b)});
 LISTS.forEach(L=>L.lg=LGROUPS.find(g=>g[1].includes(L.list))[0]);
 const ALL=SHEETS.concat(LISTS);
+// Load order follows the eAM Implementation Guide (Setting Up): areas, resources and departments, categories and asset
+// groups, activity definitions, attributes, then assets and what hangs off them, failure analysis, meters and PM.
+const SHEET_ORDER=["area","res","resr","dres","cat","cs","ag","ca","act","aop","ares","actbom","attg","attf","atta","an","attv","rt","rl","abom","aa","fc","cc","rc","fs","fsa","fcomb","met","mas","mr","pmset","pms","pma","pmd","pmc","pmr","pml","att"];
+const SHEET_GROUP={res:"Foundation",resr:"Foundation",dres:"Foundation",an:"Assets",attv:"Assets",rt:"Assets",rl:"Assets",abom:"Assets",aa:"Assets",met:"Preventive maintenance",mas:"Preventive maintenance",mr:"Preventive maintenance"};
+SHEETS.sort((a,b)=>{const x=SHEET_ORDER.indexOf(a.id),y=SHEET_ORDER.indexOf(b.id);return (x<0?999:x)-(y<0?999:y)});
+SHEETS.forEach(sh=>{if(SHEET_GROUP[sh.id])sh.g=SHEET_GROUP[sh.id]});
+// Oracle setup this workbook does not load: it must exist before phase 1 (the reference lists hold the values).
+const ORACLE_SETUP=[["Organizations and eAM parameters","Inventory > Setup > Organizations; eAM > Setup > Parameters (asset subinventory, WIP class, default department)","Organizations list"],
+  ["Work order statuses","eAM > Setup > Work Order Statuses","Work order statuses list"],
+  ["Departments and approvers","Bills of Material > Routings > Departments (resources are assigned on the Department Resources sheet)","Departments list"],
+  ["Lookups","Application Developer / eAM lookups: activity types, causes, sources, shutdown types, priorities, work order types, criticality","Activity types, Activity causes, Activity sources, Shutdown types, Priorities, Work order types, Criticality codes lists"],
+  ["WIP accounting classes (Maintenance)","Work in Process > Setup > WIP Accounting Classes","WIP accounting classes list"],
+  ["Item templates (@Asset Group, @Rebuildable, @Activity)","Inventory > Setup > Items > Templates","Item templates list"],
+  ["Units of measure","Inventory > Setup > Units of Measure","Units of measure list"],
+  ["Planners","Inventory > Setup > Planners","Planners list"],
+  ["Cost types","Cost Management > Setup > Cost Types (for Resource Rates)",""],
+  ["Category structure (Asset Management flexfield) and the EAM category set","Inventory > Setup > Flexfields; Inventory > Setup > Categories > Category Sets","Category Set sheet adds valid categories to the set"]];
 const BYID={};SHEETS.forEach((s,i)=>s.no=i+1);ALL.forEach(s=>{s.ix={};s.fields.forEach((fl,j)=>s.ix[fl.n]=j);BYID[s.id]=s});
 LK_USES.orgs.push(...LISTS.filter(l=>l.list!=="orgs").map(l=>({sid:l.id,field:"Organization",len:3})));
 
@@ -1778,18 +1795,20 @@ function exportBlankTemplate(){
   const rm=[["eAM conversion template"],["From the eAM load builder, "+new Date().toLocaleDateString()],[],
     ["How to use"],
     ["1. Every tab, \"Ref - \" tabs included: fill from row 8, column B on, and leave column A blank."],
-    ["2. Work in load order (below): later sheets refer to earlier ones, e.g. an asset needs its Asset Group."],
+    ["2. Work in load order (below). It follows the Oracle eAM Implementation Guide: Oracle setup first (not loaded here), then Foundation (areas, resources, departments, categories, asset groups), Activities, Attributes, Assets and what hangs off them, Failure analysis, Preventive maintenance (meters, set names, schedules), Attachments. Later sheets refer to earlier ones, e.g. an asset needs its Asset Group."],
     ["3. Bring the file back with Import in the eAM load builder or DataFlow's Build page. Every row is checked as it lands."],
     ["4. Rows 1 to 7 describe each column: its name, Oracle data type, length or format, whether Oracle requires it (* in Comments too), the allowed values or the sheet it must exist on, notes, and the Oracle table and column it lands in."],
     ["5. \"Ref - \" tabs hold your valid Oracle codes (DataFlow can fill them from Oracle). A filled list has those columns checked; an empty one skips that check."],
     ["6. Already in Oracle = Y marks a row that's already in Oracle: it counts as a valid parent and isn't loaded."],
+    [],["Before you load: Oracle setup this workbook does not load"],["","Setup","Where in Oracle","Checked by"],
+    ...ORACLE_SETUP.map(([a,b,c])=>["",a,b,c]),
     [],["Load order"],["No.","Group","Sheet","Where in Oracle","Columns","Required columns"],
     ...SHEETS.map(sh=>[sh.no,sh.g,sh.name,sh.nav||"",sh.fields.filter(f=>!f.tool).length,sh.fields.filter(f=>f.r).map(f=>f.n).join(", ")]),
     [],["Reference lists"],["","","Tab","Used for","","Oracle source"],...LISTS.map(L=>["","",("Ref - "+L.name).slice(0,31),(L.nav||"").trim(),"",L.src])];
   const rws=XLSX.utils.aoa_to_sheet(rm);rws["!cols"]=[{wch:8},{wch:22},{wch:26},{wch:70},{wch:9},{wch:60}];
   // Read me: title, section headings, and the two tables (header row + bordered, wrapped cells).
   let table=0;rm.forEach((row,r)=>{const a=row[0];
-    if(r===0)setStyle(rws,r,0,XS.title);else if(a==="How to use"||a==="Load order"||a==="Reference lists"){setStyle(rws,r,0,XS.section);table=a==="How to use"?0:-1}
+    if(r===0)setStyle(rws,r,0,XS.title);else if(a==="How to use"||a==="Load order"||a==="Reference lists"||/^Before you load/.test(a)){setStyle(rws,r,0,XS.section);table=a==="How to use"?0:-1}
     else if(table===-1){row.forEach((v,c)=>{if(v!=="")setStyle(rws,r,c,XS.head)});table=1}else if(table===1&&row.length)row.forEach((v,c)=>{if(c>=row.findIndex(x=>x!==""))setStyle(rws,r,c,XS.cell)});else if(row.length===0)table=0;else setStyle(rws,r,0,XS.text)});
   XLSX.utils.book_append_sheet(wb,rws,"Read me");
   for(const sh of SHEETS){const cols=outCols(sh,false);const ws=XLSX.utils.aoa_to_sheet(templateHeader(sh,cols));ws["!cols"]=templateCols(cols);styleTemplateTab(ws,cols,ws["!cols"]);XLSX.utils.book_append_sheet(wb,ws,sh.name.slice(0,31))}
