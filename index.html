@@ -412,7 +412,8 @@ const SHEETS=[
 {id:"met",g:"Meters",name:"Meters",
  fields:[f("Name","t",80,1),f("Description","t",240),f("Type","e",8,1,{en:["Absolute","Change"]}),f("UOM","t",3,1,{lk:"uom"}),f("Value Change","e",11,1,{en:["Ascending","Descending","Fluctuating"]}),f("Used In Scheduling","yn"),f("Required","yn"),f("Rate (per day)","n"),f("Number of Past Readings","n"),f("Initial Reading","n"),f("Initial Read Date","d"),f("Effective From","d"),f("Effective To","d",0,0,{after:"Effective From"})],keys:[["Name"]],
  // EAM_METER_PUB refused a scheduling meter without a rate ("Required parameter 'p_default_usage_rate' is missing", 2026-10-08).
- rule(g,P){if(g("Used In Scheduling")==="Y"&&!g("Rate (per day)"))P("Rate (per day)","w","A meter used in scheduling needs a usage rate per day - Oracle may refuse the meter without one","Scheduling meter without a rate")}},
+ // ... and with a rate it then asked for p_use_past_reading: give both Rate (per day) and Number of Past Readings.
+ rule(g,P){if(g("Used In Scheduling")==="Y")for(const x of ["Rate (per day)","Number of Past Readings"])if(!g(x))P(x,"w","A meter used in scheduling needs Rate (per day) and Number of Past Readings - Oracle may refuse the meter without them","Scheduling meter without rate / past readings")}},
 {id:"mas",g:"Meters",name:"Meter Asset Association",fields:[O(),f("Meter Name","t",80,1,{ref:rMeter("Meter Name")}),f("Asset Number","t",30,1,{ref:rAssetOnly("Asset Number")})],keys:[["Organization","Meter Name","Asset Number"]]},
 {id:"mr",g:"Meters",name:"Meter Readings",
  fields:[f("Meter Name","t",80,1,{ref:rMeter("Meter Name")}),f("Date of Reading","dt",0,1),f("Reading Value","n",0,1),f("Reset Flag","yn"),f("Reading Before Reset","n"),f("Reset Comments","t",2000)],keys:[["Meter Name","Date of Reading"]],
