@@ -520,7 +520,7 @@ const SHEETS=[
  keys:[["Organization","Asset No/Activity","Category","Operation Sequence Number","Sequence"]],
  rule(g,P,X){const o=g("Organization"),e=g("Asset No/Activity"),c=g("Category"),dt=g("Data Type");
   if(c==="Operation Attachments"&&!g("Operation Sequence Number"))P("Operation Sequence Number","e","Required for Operation Attachments","Operation attachment without sequence");
-  else if(c&&g("Operation Sequence Number"))P("Operation Sequence Number","w","Leave blank unless Category is Operation Attachments","Operation sequence on a non-operation attachment");
+  else if(c&&c!=="Operation Attachments"&&g("Operation Sequence Number"))P("Operation Sequence Number","w","Leave blank unless Category is Operation Attachments","Operation sequence on a non-operation attachment");
   if((dt==="Short Text"||dt==="Long Text")&&!g("Text"))P("Text","e",dt+" needs Text","Text attachment without text");
   if(dt==="Short Text"&&g("Text").length>4000)P("Text","e","Short Text is limited to 4,000 characters","Short text over 4,000 characters");
   if(dt==="Web Page"&&!g("URL"))P("URL","e","Web Page needs a URL","Web page attachment without URL")}}
