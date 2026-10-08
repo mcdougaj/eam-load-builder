@@ -485,6 +485,10 @@ const SHEETS=[
   return [["PM Activities JSON",JSON.stringify(acts)],["PM Rules JSON",JSON.stringify(rules)]]},
  rule(g,P,X){const o=g("Organization"),s=g("Schedule Name"),a=g("Asset Number");if(!o||!s)return;const kk=k(o,s);
   if(a&&!X.set("aa",["Organization","Asset Number"]).has(k(o,a)))P("Asset Number","w","Asset has no activities on Activity Association","Asset has no activity association");
+  // Oracle keeps one schedule per asset, activity and set name ("The set name is not unique for this activity association"): two schedules on the sheet may not share one (proven live 2026-10-08).
+  if(a){const setn=g("Set Name")||"MAIN",acts=n=>{const sh=BYID.pma,out=new Set();for(const r of S.data.pma){if(!r||isBlank(r)||isFlag(sh,r))continue;const gg=f=>r[sh.ix[f]]||"";if(gg("Organization")===o&&gg("Schedule Name")===n)out.add(gg("Activity"))}return out},mine=acts(s);
+   for(const r of S.data.pms){if(!r||isBlank(r)||isFlag(BYID.pms,r))continue;const gg=f=>r[BYID.pms.ix[f]]||"";if(gg("Organization")!==o||gg("Schedule Name")===s||gg("Asset Number")!==a||(gg("Set Name")||"MAIN")!==setn)continue;
+    const other=acts(gg("Schedule Name")),dup=[...mine].find(x=>other.has(x));if(dup){P("Set Name","e",`Schedule ${gg("Schedule Name")} already has activity ${dup} on ${a} in set ${setn} - Oracle allows one schedule per asset, activity and set name`,"Two schedules share an activity and set name");break}}}
   // Oracle refuses a schedule with no activity or no rule, and a schedule loads with its child rows in one call.
   const inOra=DF_HOST&&dfState("pms",["Organization","Schedule Name"],[o,s])==="y";
   if(!inOra&&!X.set("pma",["Organization","Schedule Name"]).has(kk))P("Schedule Name","e","No activity on PM Activity - Oracle needs at least one activity per schedule","Schedule has no PM activity",{s:"pma",v:{Organization:o,"Schedule Name":s}});
