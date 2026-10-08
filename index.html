@@ -387,7 +387,9 @@ const SHEETS=[
  keys:[["Organization","Asset Number","Attribute Group"]],
  rule(g,P,X){const o=g("Organization"),a=g("Asset Number"),grp=g("Attribute Group");if(!a||!grp)return;
   const ag=X.map("an",["Organization","Asset Number"],"Asset Group").get(k(o,a));
-  if(ag&&!X.set("atta",["Organization","Asset Group","Attribute Group"]).has(k(o,ag,grp)))P("Attribute Group","e",`Attribute group "${grp}" isn't assigned to asset group "${ag}"`,"Attribute group not assigned to the asset's group",{s:"atta",v:{Organization:o,"Asset Group":ag,"Attribute Group":grp}});
+  // DataFlow edition: an assignment that exists in Oracle is fine too (nothing is said while Oracle is asked).
+  if(ag&&!X.set("atta",["Organization","Asset Group","Attribute Group"]).has(k(o,ag,grp))){const st=DF_HOST?dfState("atta",["Organization","Asset Group","Attribute Group"],[o,ag,grp]):"n";
+    if(st!=="y")P("Attribute Group",st==="?"?"w":"e",`Attribute group "${grp}" isn't assigned to asset group "${ag}" on Attribute Assignment${DF_HOST?(st==="?"?" (checking Oracle…)":" or in Oracle"):""}`,"Attribute group not assigned to the asset's group"+(st==="?"?" (checking Oracle)":""),{s:"atta",v:{Organization:o,"Asset Group":ag,"Attribute Group":grp}})}
   if(ag==="")P("Asset Number","w","Asset has no asset group on Asset Numbers, so the attribute group assignment can't be checked","Attribute assignment not checked (asset has no asset group)");
   const defs=X.set("attf",["Attribute Group","Column"]);const lens=X.map("attf",["Attribute Group","Column"],"Length");
   if(!X.set("attf",["Attribute Group"]).has(grp)){let any=false;for(const p of ["C","N","D"]){const n=p==="C"?20:10;for(let i=1;i<=n;i++)if(g(p+"Attribute"+i))any=true}
