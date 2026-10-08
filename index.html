@@ -494,7 +494,7 @@ const SHEETS=[
  fields:[O(),f("Schedule Name","t",50,1,{ref:rSched}),f("Effective From","d"),f("Effective To","d",0,0,{after:"Effective From"}),f("Day Interval","n",0,1,{gt0:"e"})],
  keys:[["Organization","Schedule Name","Effective From"]],
  rule(g,P,X){const o=g("Organization"),s=g("Schedule Name");const lr=o&&s&&X.rowsBy("pmc",["Organization","Schedule Name"]).get(k(o,s));if(lr)P("Schedule Name","w","Also has a calendar rule on PM Calendar Based. Keep one.","Schedule on both Day Interval and Calendar",null,{s:"pmc",rows:lr})}},
-{id:"pmc",g:"Preventive maintenance",name:"PM Calendar Based",nav:"Frequency is Weekly, Monthly or Yearly",
+{id:"pmc",g:"Preventive maintenance",name:"PM Calendar Based",ckeys:[["Organization","Schedule Name","Frequency"]],nav:"Frequency is Weekly, Monthly or Yearly",
  fields:[O(),f("Schedule Name","t",50,1,{ref:rSched}),f("Effective From","d"),f("Effective To","d",0,0,{after:"Effective From"}),f("Frequency","e",10,1,{en:["Weekly","Monthly","Yearly"],hint:{daily:"Daily isn't a calendar frequency in this template. Load it on PM Day Interval instead."}}),f("Interval","n",0,1,{gt0:"e"}),f("Repeat","e",10,0,{en:["FIRST","SECOND","THIRD","FOURTH","LAST","DayofMon"]}),f("Day No","n",0,0,{min:1,max:31}),f("Day Of Week","e",10,0,{en:["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Day"]}),f("Month","e",10,0,{en:MONTHS})],
  keys:[["Organization","Schedule Name","Effective From"]],
  rule(g,P,X){const fr=g("Frequency"),o=g("Organization"),s=g("Schedule Name");
