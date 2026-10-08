@@ -441,9 +441,10 @@ const SHEETS=[
 {id:"dres",g:"Activities",name:"Department Resources",nav:"Bills of Material > Routings > Departments > Resources button. A resource must be assigned to a department before an operation in that department can use it.",
  fields:[O(),f("Department","t",10,1,{ref:{s:"dept",orList:"depts",label:"Departments or the Departments list",m:[["Organization","Organization"],["Department","Department"]]}}),f("Resource","t",10,1,{ref:{s:"res",orList:"resources",label:"Resources or the Resources in Oracle list",m:[["Organization","Organization"],["Resource","Resource"]]}}),f("Available 24 Hours","yn"),f("Share","yn"),f("Units","n",0,1,{gt0:"e"})],
  keys:[["Organization","Department","Resource"]]},
-{id:"dapp",g:"Foundation",name:"Department Approvers",nav:"eAM > Setup > Department Approvers. The user (with the responsibility) who approves work requests for the department. Loaded through EAM_DEPT_APPROVERS_PUB.",
+{id:"dapp",g:"Foundation",name:"Department Approvers",nav:"eAM > Setup > Department Approvers. The user (with the responsibility) who approves work requests for the department - one approver record per department. Loaded through EAM_DEPT_APPROVERS_PUB.",
  fields:[O(),f("Department","t",10,1,{ref:{s:"dept",orList:"depts",label:"Departments or the Departments list",m:[["Organization","Organization"],["Department","Department"]]}}),f("Responsibility","t",100,1),f("Approver User","t",100,1)],
- keys:[["Organization","Department","Responsibility","Approver User"]]},
+ // Oracle keeps one approver record per department (EAM_DEPT_REC_EXISTS), so the department is the key.
+ keys:[["Organization","Department"]]},
 {id:"act",g:"Activities",name:"Activity",nav:"Activity header. Template must be a defined item template.",
  fields:[O(),f("Activity Name","t",40,1),f("Description","t",240,1),f("Template Name","t",30,1,{lk:"templates",def:"@Activity"}),f("Activity Type","t",80,0,{lk:"act_type"}),f("Shutdown","t",80,0,{lk:"shutdown"}),f("Activity Cause","t",80,0,{lk:"act_cause"}),f("Activity Source","t",80,0,{lk:"act_source"}),f("Notification","yn")],
  keys:[{f:["Organization","Activity Name"],msg:"Activity defined more than once. One header per activity, so one Type, Cause and Source."}],
