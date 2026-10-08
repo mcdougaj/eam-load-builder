@@ -470,10 +470,21 @@ const SHEETS=[
 {id:"pms",g:"Preventive maintenance",name:"PM Schedule",
  fields:[O(),f("Schedule Name","t",50,1),f("Set Name","t",80,1,{def:"MAIN",ref:{s:"pmset",orList:"pmsets",label:"PM Set Names or the PM set names in Oracle list",m:[["Set Name","Set Name"]]}}),f("Asset Number","t",30,1,{ref:rAsset("Asset Number")}),f("Default","yn"),f("Reschedule Manual WO","yn"),f("Run to Failure","yn"),f("Effective From","d"),f("Effective To","d",0,0,{after:"Effective From"}),f("Lead Time In Days","n",0,0,{min:0}),f("Use Last Service","t",20,1),f("Base Date","d"),f("Last Scheduled Start Date","d"),f("To Suggest Next Service","t",10,1),f("Use Date That Comes","e",10,1,{en:["First","Last"]}),f("Work Order Status","t",80,1,{lk:"wo_status"}),f("Generate Next Work Order","yn"),f("Interval Per Cycle","n",0,0,{min:1}),f("Current Cycle","n",0,0,{min:0}),f("Current Interval Count","n",0,0,{min:0}),f("Planner","t",10,0,{lk:"planners"})],
  keys:[["Organization","Schedule Name"]],
+ // Oracle creates a schedule in one call with its activities and rules: the rows of the five PM child sheets travel with it.
+ extra(d){const row=S.data.pms[d],g=f=>row[BYID.pms.ix[f]]||"",o=g("Organization"),n=g("Schedule Name");
+  const rows=(id,fn)=>{const sh=BYID[id],out=[];for(const r of S.data[id]){if(!r||isBlank(r)||isFlag(sh,r))continue;const gg=f=>r[sh.ix[f]]||"";if(gg("Organization")===o&&gg("Schedule Name")===n)out.push(fn(gg))}return out};
+  const acts=rows("pma",gg=>({activity:gg("Activity"),interval:gg("Multiple Interval"),repeat:gg("Repeat in Cycle"),tolerance:gg("Tolerance")}));
+  const rules=[...rows("pmd",gg=>({type:"day",from:gg("Effective From"),to:gg("Effective To"),day:gg("Day Interval")})),
+    ...rows("pmr",gg=>({type:"run",meter:gg("Meter Name"),from:gg("Effective From"),to:gg("Effective To"),interval:gg("Run Interval"),last:gg("Last Service Reading")})),
+    ...rows("pml",gg=>({type:"list",date:gg("List Date"),desc:gg("List Date Description")})),
+    ...rows("pmc",gg=>({type:"cal",from:gg("Effective From"),to:gg("Effective To"),frequency:gg("Frequency"),interval:gg("Interval"),repeat:gg("Repeat"),dayno:gg("Day No"),dayofweek:gg("Day Of Week"),month:gg("Month")}))];
+  return [["PM Activities JSON",JSON.stringify(acts)],["PM Rules JSON",JSON.stringify(rules)]]},
  rule(g,P,X){const o=g("Organization"),s=g("Schedule Name"),a=g("Asset Number");if(!o||!s)return;const kk=k(o,s);
   if(a&&!X.set("aa",["Organization","Asset Number"]).has(k(o,a)))P("Asset Number","w","Asset has no activities on Activity Association","Asset has no activity association");
-  if(!X.set("pma",["Organization","Schedule Name"]).has(kk))P("Schedule Name","w","No activity on PM Activity","Schedule has no PM activity");
-  if(!["pmd","pmc","pmr","pml"].some(id=>X.set(id,["Organization","Schedule Name"]).has(kk)))P("Schedule Name","w","No interval rule (Day Interval, Calendar, Run Interval or Date List)","Schedule has no interval rule")}},
+  // Oracle refuses a schedule with no activity or no rule, and a schedule loads with its child rows in one call.
+  const inOra=DF_HOST&&dfState("pms",["Organization","Schedule Name"],[o,s])==="y";
+  if(!inOra&&!X.set("pma",["Organization","Schedule Name"]).has(kk))P("Schedule Name","e","No activity on PM Activity - Oracle needs at least one activity per schedule","Schedule has no PM activity",{s:"pma",v:{Organization:o,"Schedule Name":s}});
+  if(!inOra&&!["pmd","pmc","pmr","pml"].some(id=>X.set(id,["Organization","Schedule Name"]).has(kk)))P("Schedule Name","e","No interval rule (Day Interval, Calendar, Run Interval or Date List) - Oracle needs at least one rule per schedule","Schedule has no interval rule")}},
 {id:"pma",g:"Preventive maintenance",name:"PM Activity",nav:"Asset and activity must be paired on Activity Association",
  fields:[O(),f("Schedule Name","t",50,1,{ref:rSched}),f("Activity","t",40,1,{ref:rAct("Activity")}),f("Multiple Interval","n",0,0,{min:1}),f("Repeat in Cycle","yn"),f("Tolerance","n")],
  keys:[["Organization","Schedule Name","Activity"]],
@@ -1196,7 +1207,9 @@ function dfLookupResult(m){const s=dfSent.get(m.sheet)||[];
 function dfState(sid,fields,vals){if(!DF_HOST)return "n";const kk=vals.join(SEP),kn=DF_KNOWN.get(sid);if(kn&&kn.has(kk))return "y";
   const a=DF_ASKED.get(sid);if(!a||!a.has(kk)){dfQueueLookup(sid,fields,vals,kk);return "?"}return a.get(kk)}
 function dfRows(sh,pick){const cols=outCols(sh,true),val=(d,[f,i])=>String(outVal(f,S.data[sh.id][d][i]||""));
-  return {sheet:sh.name,headers:cols.map(([f])=>f.n),rows:pick.map(d=>cols.map(c=>val(d,c))),sourceRows:pick}}
+  // extra: computed columns that travel with the row (the PM schedule packs its activities and rules as JSON)
+  const ex=sh.extra?pick.map(d=>sh.extra(d)):null,exHead=ex&&ex.length?ex[0].map(p=>p[0]):[];
+  return {sheet:sh.name,headers:cols.map(([f])=>f.n).concat(exHead),rows:pick.map((d,j)=>cols.map(c=>val(d,c)).concat(ex?ex[j].map(p=>p[1]):[])),sourceRows:pick}}
 // Mark rows Already in Oracle, but only rows that still hold the key DataFlow saw (the sheet may have changed meanwhile).
 function dfMark(sheetName,sourceRows,keys){const sh=SHEETS.find(s=>s.name===sheetName);const none={marked:0,skipped:(sourceRows||[]).length};
   if(!sh)return none;const j=sh.ix[FLAG];if(j==null)return none;const [kf,kc]=outCols(sh,true)[0];const rows=[];
@@ -1251,6 +1264,8 @@ function dfOnMessage(m){if(!m||typeof m!=="object")return;
 if(DF_HOST)window.chrome.webview.addEventListener("message",e=>dfOnMessage(e.data));
 // A reference list holds values Oracle already has: nothing on it is loaded. Lists that have a data sheet point to it.
 const LIST_SHEET={L_resources:"res"};
+// Sheets whose rows load with another sheet's row (one Oracle call per PM schedule carries its activities and rules).
+const LOADS_WITH={pma:"pms",pmd:"pms",pmc:"pms",pmr:"pms",pml:"pms"};
 function dfNotASheet(sh){if(!sh||!sh.list){toast("Open a sheet first.");return}
   const to=BYID[LIST_SHEET[sh.id]];
   modal(`<h2>${esc(sh.name)} is a reference list</h2><p>It holds the values Oracle already has, used to check your sheets. Nothing on a list is loaded into Oracle.</p>${to?`<p>To add new records, enter them on the <b>${esc(to.name)}</b> sheet (${to.no}) and load from there.</p>`:"<p>Open the data sheet you want to load, select its rows, then load.</p>"}
@@ -1403,6 +1418,7 @@ function dfKeyCols(sh){const k0=(sh.keys||[])[0],names=(Array.isArray(k0)?k0:(k0
 // records with an update recipe, so rows marked Already in Oracle are sent too (DataFlow holds back rows not in Oracle).
 const dfLoadSelected=()=>dfSendSelected("create"),dfUpdateSelected=()=>dfSendSelected("update");
 async function dfSendSelected(mode){const upd=mode==="update";const sh=BYID[S.active];if(!sh||sh.list){dfNotASheet(sh);return}
+  if(LOADS_WITH[sh.id]){const to=BYID[LOADS_WITH[sh.id]];modal(`<h2>${esc(sh.name)} loads with ${esc(to.name)}</h2><p>Oracle creates a PM schedule in one call with its activities and rules, so these rows go in when their schedule is loaded. Select the schedule on <b>${esc(to.name)}</b> and load from there; the rows here are marked Already in Oracle by the next Oracle check.</p><div class="row"><button class="btn" data-close>Close</button><button class="btn pri" id="goSheet">Open ${esc(to.name)}</button></div>`);$("goSheet").onclick=()=>{closeModal();openSheet(to.id)};return}
   const r0=Math.min(sel.r,sel.ar),r1=Math.max(sel.r,sel.ar),pick=[];
   for(let vr=r0;vr<=r1;vr++){const d=dr(vr);if(d==null||d>=dataRowCount())continue;const row=S.data[sh.id][d];if(isBlank(row)||(!upd&&isFlag(sh,row)))continue;pick.push(d)}
   if(!pick.length){toast(upd?"Select the rows to update first.":"Select the rows to load first. Rows marked Already in Oracle are skipped.");return}
