@@ -355,7 +355,7 @@ const SHEETS=[
   const rr=an&&X.rowsBy("rt",["Asset Route Number"]).get(an);if(rr)P("Asset Number","e",`"${an}" is also an Asset Route Number. Routes are asset numbers, so the two can't share a number`,"Asset number also used as a route",null,{s:"rt",rows:rr});
   if(an){const orgs=X.multi("an",["Asset Number"],"Organization").get(an);if(orgs&&orgs.size>1)P("Asset Number","w",`Also used in org ${[...orgs].filter(x=>x!==o).slice(0,3).join(", ")}. Confirm your instance allows the same asset number in two orgs`,"Asset number used in more than one org",null,{s:"an",rows:X.rowsBy("an",["Asset Number"]).get(an).filter(i=>(S.data.an[i][BYID.an.ix.Organization]||"")!==o)})}
   const sr=a&&sn&&X.rowsBy("rt",["Organization","Asset Group","Serial Number"]).get(k(o,a,sn));if(sr)P("Serial Number","e",`Serial "${sn}" is also used by a route in asset group "${a}"`,"Serial number shared with a route in the same asset group",null,{s:"rt",rows:sr})}},
-{id:"abom",g:"Foundation",name:"Asset BOM",nav:"Asset group bill of material",
+{id:"abom",g:"Foundation",name:"Asset BOM",ckeys:[["Organization","Asset Group","Component"]],nav:"Asset group bill of material",
  // Columns in the Bills of Material form's entry order: header Item + Alternate, then the line (Main tab), then Serial Effectivity.
  fields:[O(),f("Asset Group","t",40,1,{ref:rAG}),
   f("Alternate","t",10,0,{added:"Alternate bill designator. Blank: the primary bill"}),
@@ -479,7 +479,7 @@ const SHEETS=[
  keys:[["Organization","Schedule Name","Activity"]],
  rule(g,P,X){const o=g("Organization"),s=g("Schedule Name"),a=g("Activity");if(!o||!s||!a)return;const asset=X.map("pms",["Organization","Schedule Name"],"Asset Number").get(k(o,s));
   if(asset&&!X.set("aa",["Organization","Asset Number","Activity"]).has(k(o,asset,a)))P("Activity","e",`Asset "${asset}" and activity "${a}" aren't paired on Activity Association`,"Asset + activity not on Activity Association",{s:"aa",v:{Organization:o,"Asset Number":asset,Activity:a}})}},
-{id:"pmd",g:"Preventive maintenance",name:"PM Day Interval",nav:"Use this sheet or PM Calendar Based for a schedule, not both",
+{id:"pmd",g:"Preventive maintenance",name:"PM Day Interval",ckeys:[["Organization","Schedule Name","Day Interval"]],nav:"Use this sheet or PM Calendar Based for a schedule, not both",
  fields:[O(),f("Schedule Name","t",50,1,{ref:rSched}),f("Effective From","d"),f("Effective To","d",0,0,{after:"Effective From"}),f("Day Interval","n",0,1,{gt0:"e"})],
  keys:[["Organization","Schedule Name","Effective From"]],
  rule(g,P,X){const o=g("Organization"),s=g("Schedule Name");const lr=o&&s&&X.rowsBy("pmc",["Organization","Schedule Name"]).get(k(o,s));if(lr)P("Schedule Name","w","Also has a calendar rule on PM Calendar Based. Keep one.","Schedule on both Day Interval and Calendar",null,{s:"pmc",rows:lr})}},
@@ -495,8 +495,8 @@ const SHEETS=[
   const lr=o&&s&&X.rowsBy("pmd",["Organization","Schedule Name"]).get(k(o,s));if(lr)P("Schedule Name","w","Also has a day interval on PM Day Interval. Keep one.","Schedule on both Day Interval and Calendar",null,{s:"pmd",rows:lr})}},
 {id:"pmr",g:"Preventive maintenance",name:"PM Run Interval",
  fields:[O(),f("Schedule Name","t",50,1,{ref:rSched}),f("Meter Name","t",80,1,{ref:rMeter("Meter Name")}),f("Effective From","d"),f("Effective To","d",0,0,{after:"Effective From"}),f("Run Interval","n",0,1,{gt0:"e"}),f("Last Service Reading","n")],keys:[["Organization","Schedule Name","Meter Name"]]},
-{id:"pml",g:"Preventive maintenance",name:"PM Date Lists",fields:[O(),f("Schedule Name","t",50,1,{ref:rSched}),f("List Date","d",0,1),f("List Date Description","t",50)],keys:[["Organization","Schedule Name","List Date"]]},
-{id:"att",g:"Other",name:"Attachments",nav:"Asset Attachments point to an asset; Routing and Operation Attachments point to an activity",
+{id:"pml",g:"Preventive maintenance",name:"PM Date Lists",ckeys:[["Organization","Schedule Name","List Date"]],fields:[O(),f("Schedule Name","t",50,1,{ref:rSched}),f("List Date","d",0,1),f("List Date Description","t",50)],keys:[["Organization","Schedule Name","List Date"]]},
+{id:"att",g:"Other",name:"Attachments",ckeys:[["Organization","Asset No/Activity","Category","Sequence"]],nav:"Asset Attachments point to an asset; Routing and Operation Attachments point to an activity",
  fields:[O(),f("Asset No/Activity","t",40,1,{ref:{...rAsset("Asset No/Activity"),when:g=>g("Category")==="Asset Attachments"},also:[{...rAct("Asset No/Activity"),when:g=>!!g("Category")&&g("Category")!=="Asset Attachments"}]}),f("Operation Sequence Number","n",0,0,{ref:{...rOp("Asset No/Activity","Operation Sequence Number"),when:g=>g("Category")==="Operation Attachments"}}),f("Sequence","n",0,1,{min:1}),f("Category","e",255,1,{en:["Routing Attachments","Operation Attachments","Asset Attachments"]}),f("Title","t",80),f("Description","t",255),f("Data Type","e",10,1,{en:["Short Text","Long Text","Web Page"]}),f("Text","t",32767),f("URL","t",4000)],
  keys:[["Organization","Asset No/Activity","Category","Operation Sequence Number","Sequence"]],
  rule(g,P,X){const o=g("Organization"),e=g("Asset No/Activity"),c=g("Category"),dt=g("Data Type");
@@ -1271,6 +1271,7 @@ function dfRowKeys(sh){const k0=(sh.keys||[])[0],own=Array.isArray(k0)?k0:(k0&&k
   const add=f=>{if(!out.some(x=>x.join(SEP)===f.join(SEP)))out.push(f)},der=n=>!!(sh.derive&&sh.derive[n]);
   for(const s2 of SHEETS)for(const fl of s2.fields)for(const alt of [...(fl.ref?(fl.ref.any||[fl.ref]):[]),...(fl.also||[])]){if(alt.s!==sh.id)continue;
     const rk=alt.m.map(p=>p[0]);if(rk.every(n=>own.includes(n)||der(n))&&(own.every(n=>rk.includes(n))||rk.some(der)))add(rk)}
+  for(const ck of sh.ckeys||[])add(ck);   // extra key sets DataFlow can check, for sheets whose own key has a blank or date part
   return out}
 const dfAsk=(sid,fields,rows)=>new Promise(res=>dfSendLookup(sid,fields,rows,res));
 const dfWaiting=()=>dfLookupQ.size>0||[...DF_ASKED.values()].some(a=>[...a.values()].includes("?"));
