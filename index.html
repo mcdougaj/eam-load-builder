@@ -441,6 +441,9 @@ const SHEETS=[
 {id:"dres",g:"Activities",name:"Department Resources",nav:"Bills of Material > Routings > Departments > Resources button. A resource must be assigned to a department before an operation in that department can use it.",
  fields:[O(),f("Department","t",10,1,{ref:{s:"dept",orList:"depts",label:"Departments or the Departments list",m:[["Organization","Organization"],["Department","Department"]]}}),f("Resource","t",10,1,{ref:{s:"res",orList:"resources",label:"Resources or the Resources in Oracle list",m:[["Organization","Organization"],["Resource","Resource"]]}}),f("Available 24 Hours","yn"),f("Share","yn"),f("Units","n",0,1,{gt0:"e"})],
  keys:[["Organization","Department","Resource"]]},
+{id:"dapp",g:"Foundation",name:"Department Approvers",nav:"eAM > Setup > Department Approvers. The user (with the responsibility) who approves work requests for the department. Loaded through EAM_DEPT_APPROVERS_PUB.",
+ fields:[O(),f("Department","t",10,1,{ref:{s:"dept",orList:"depts",label:"Departments or the Departments list",m:[["Organization","Organization"],["Department","Department"]]}}),f("Responsibility","t",100,1),f("Approver User","t",100,1)],
+ keys:[["Organization","Department","Responsibility","Approver User"]]},
 {id:"act",g:"Activities",name:"Activity",nav:"Activity header. Template must be a defined item template.",
  fields:[O(),f("Activity Name","t",40,1),f("Description","t",240,1),f("Template Name","t",30,1,{lk:"templates",def:"@Activity"}),f("Activity Type","t",80,0,{lk:"act_type"}),f("Shutdown","t",80,0,{lk:"shutdown"}),f("Activity Cause","t",80,0,{lk:"act_cause"}),f("Activity Source","t",80,0,{lk:"act_source"}),f("Notification","yn")],
  keys:[{f:["Organization","Activity Name"],msg:"Activity defined more than once. One header per activity, so one Type, Cause and Source."}],
@@ -541,14 +544,14 @@ LISTS.forEach(L=>L.lg=LGROUPS.find(g=>g[1].includes(L.list))[0]);
 const ALL=SHEETS.concat(LISTS);
 // Load order follows the eAM Implementation Guide (Setting Up): areas, resources and departments, categories and asset
 // groups, activity definitions, attributes, then assets and what hangs off them, failure analysis, meters and PM.
-const SHEET_ORDER=["area","res","resr","dept","dres","cat","cs","ag","ca","act","aop","ares","actbom","attg","attf","atta","an","attv","rt","rl","abom","aa","fc","cc","rc","fs","fsa","fcomb","met","mas","mr","pmset","pms","pma","pmd","pmc","pmr","pml","pmsup","att"];
-const SHEET_GROUP={res:"Foundation",resr:"Foundation",dept:"Foundation",dres:"Foundation",an:"Assets",attv:"Assets",rt:"Assets",rl:"Assets",abom:"Assets",aa:"Assets",met:"Preventive maintenance",mas:"Preventive maintenance",mr:"Preventive maintenance"};
+const SHEET_ORDER=["area","res","resr","dept","dres","dapp","cat","cs","ag","ca","act","aop","ares","actbom","attg","attf","atta","an","attv","rt","rl","abom","aa","fc","cc","rc","fs","fsa","fcomb","met","mas","mr","pmset","pms","pma","pmd","pmc","pmr","pml","pmsup","att"];
+const SHEET_GROUP={res:"Foundation",resr:"Foundation",dept:"Foundation",dres:"Foundation",dapp:"Foundation",an:"Assets",attv:"Assets",rt:"Assets",rl:"Assets",abom:"Assets",aa:"Assets",met:"Preventive maintenance",mas:"Preventive maintenance",mr:"Preventive maintenance"};
 SHEETS.sort((a,b)=>{const x=SHEET_ORDER.indexOf(a.id),y=SHEET_ORDER.indexOf(b.id);return (x<0?999:x)-(y<0?999:y)});
 SHEETS.forEach(sh=>{if(SHEET_GROUP[sh.id])sh.g=SHEET_GROUP[sh.id]});
 // Oracle setup this workbook does not load: it must exist before phase 1 (the reference lists hold the values).
 const ORACLE_SETUP=[["Organizations and eAM parameters","Inventory > Setup > Organizations; eAM > Setup > Parameters (asset subinventory, WIP class, default department)","Organizations list"],
   ["Work order statuses","eAM > Setup > Work Order Statuses","Work order statuses list"],
-  ["Departments and approvers","Bills of Material > Routings > Departments (resources are assigned on the Department Resources sheet)","Departments list"],
+  ["Department approver users and responsibilities","System Administrator > Security > User (the approver needs the responsibility; departments, resources and approvers themselves load from their sheets)","Departments list"],
   ["Lookups","Application Developer / eAM lookups: activity types, causes, sources, shutdown types, priorities, work order types, criticality","Activity types, Activity causes, Activity sources, Shutdown types, Priorities, Work order types, Criticality codes lists"],
   ["WIP accounting classes (Maintenance)","Work in Process > Setup > WIP Accounting Classes","WIP accounting classes list"],
   ["Item templates (@Asset Group, @Rebuildable, @Activity)","Inventory > Setup > Items > Templates","Item templates list"],
